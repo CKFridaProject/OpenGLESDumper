@@ -19,7 +19,11 @@ if (appElement) {
             const ul = document.createElement('ul');
             json.forEach(item => {
                 const li = document.createElement('li');
-                li.textContent = item;
+                //li.textContent = item;
+                const a = document.createElement('a');
+                a.href = `/dumps/${item}`;
+                a.textContent = item;
+                li.appendChild(a);
                 ul.appendChild(li);
             });
             appElement.appendChild(ul);
