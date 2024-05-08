@@ -8,7 +8,15 @@ import {
 import { 
     HookAction,
 } from "./HookAction";
-import { getAndroidAppInfo } from "./AndroidAPI";
+
+import { 
+    getAndroidAppInfo 
+} from "./AndroidAPI";
+
+import {
+    DUMP_DATA,
+    glTexImage2D_DATA,
+} from "../src/utils"
 
 export const findFuns = (s:string, ignore_case?:boolean, libs?:string[]) =>{
     libs = libs || [];
@@ -350,22 +358,26 @@ const hookGame = () => {
         const data               = thiz.args8;
         const dataLength         = calculateDataLength(width, height, format, type)
 
-        const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.png`;
-        console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
-        fileNo++;
-        const info = {
-            function:"glTexImage2D",
-            target,
-            level,
-            internalFormat,
-            width,
-            height,
-            format,
-            type,
-            data:base64Encode(data, dataLength),
-        }
+        if(!data.isNull()){
+            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+            console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
+            fileNo++;
+            const jsoninfo : DUMP_DATA = {
+                function:"glTexImage2D",
+                data: {
+                    target,
+                    level,
+                    internalFormat,
+                    width,
+                    height,
+                    format,
+                    type,
+                    data: base64Encode(data, dataLength),
+                }
+            }
 
-        const ret = new NativeFunction(cm.writeTextFile, 'int', ['pointer','pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(info)));
+            const ret = new NativeFunction(cm.writeTextFile, 'int', ['pointer','pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(jsoninfo)));
+        }
 
     },
 }, }, 

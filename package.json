@@ -22,16 +22,16 @@
   },
   "homepage": "https://github.com/mengxipeng1122/OpenGLESDumper#readme",
   "devDependencies": {
-    "@types/frida-gum": "^18.7.0",
-    "frida": "^16.2.1",
-    "frida-compile": "^10.0.0",
     "@types/express": "^4.17.21",
+    "@types/frida-gum": "^18.7.0",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.12.10",
     "@types/socket.io": "^3.0.2",
     "@types/webpack-dev-middleware": "^5.3.0",
     "@types/webpack-hot-middleware": "^2.25.9",
     "express": "^4.19.2",
+    "frida": "^16.2.1",
+    "frida-compile": "^10.0.0",
     "html-webpack-plugin": "^5.6.0",
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "multer": "^1.4.5-lts.1",
+    "querystring-es3": "^0.2.1",
     "socket.io": "^4.7.5"
   }
 }
