@@ -1,49 +1,77 @@
 
 import { DUMP_DATA, glTexImage2D_DATA } from "./utils"
 
-function sayHello() {
-    const appDiv = document.getElementById('app');
-    if (appDiv) {
-        appDiv.innerHTML = '<h2>Hello World</h2>';
+// client.ts
+
+
+const init = async (appDiv : HTMLDivElement) => {
+
+    const list = document.createElement('ul');
+
+    const detailDiv = document.createElement('div');
+    appDiv.appendChild(detailDiv);
+
+    const dumpListUrl='/dumps.json'
+
+    const dumplist = await fetch(dumpListUrl).then(res => res.json());
+
+    console.log('dumplist', dumplist.length)
+
+    let dumpsObj: { [key: string]: any } = {};
+
+    const allItems = dumplist.map(async (item: string) => {
+        const dumpUrl = `dumps/${item}`;
+        const response = await fetch(dumpUrl);
+        const data = await response.json();
+
+        dumpsObj[item] = data;
+    });
+
+    await Promise.all(allItems)
+
+    Object.keys(dumpsObj).forEach(key => {
+        const dumpData = dumpsObj[key]  as DUMP_DATA;
+
+        const listItem = document.createElement('li');
+
+        {
+            const  fun  = dumpData.function;
+            if(fun == 'glTexImage2D'){
+                const data = dumpData.data as glTexImage2D_DATA;
+                const text = `${key} ${fun} ${data.level} ${data.internalFormat} ${data.width} ${data.height} ${data.format} ${data.type} `
+                listItem.textContent = text
+            }
+        }
+        listItem.addEventListener('click', () => {
+            updateDetail(key,dumpData);
+        });
+
+
+        list.appendChild(listItem);
+    });
+    
+    appDiv.appendChild(list);
+
+
+
+    function updateDetail(name:string,item: DUMP_DATA) {
+        detailDiv.textContent = name;
     }
+
+
+
+    const firstChild = list.firstChild;
+
+    if (firstChild && firstChild instanceof HTMLElement) {
+        firstChild.click();
+    }
+
 }
 
-// Call this function to modify the DOM
-// sayHello();
+const appDiv = document.getElementById('app') as HTMLDivElement;
+if(appDiv){
 
-{
-    const appDiv = document.getElementById('app');
-    if (appDiv) {
-        const dumplistUrl = '/dumps.json';
-        fetch(dumplistUrl)
-            .then(res => res.json())
-            .then((data) => {
-                const ul = document.createElement('ul');
-                data.forEach(function (dump: string) {
-                    const li = document.createElement('li');
-                    const a = document.createElement('a');
-                    const dumpUrl = '/dumps/' + dump;
-                    a.href = `/showDump.html?u=${dumpUrl}`;
-                    a.textContent = dump;
-                    fetch(dumpUrl)
-                        .then(res => res.json())
-                        .then((data:DUMP_DATA) => {
-                            const fun = data.function
-                            if(fun == 'glTexImage2D'){
-                                const info = data.data as glTexImage2D_DATA;
-                                a.textContent += ` ${info.level} ${info.internalFormat} ${info.width}x${info.height} ${info.format} ${info.type}`
-                            }
-                            //const pre = document.createElement('pre');
-                            //pre.textContent = JSON.stringify(data, null, 2);
-                            //li.appendChild(pre);
-                        });
-                    li.appendChild(a);
-                    ul.appendChild(li);
-                });
-                appDiv.appendChild(ul);
-            });
-    }
+    init(appDiv)
+
 }
-
-
 

@@ -29,7 +29,7 @@ const compiler = webpack(config, (error, stats) => {
 
     console.log(
         stats?.toString({
-            chunks: false,  // Makes the build much quieter
+            chunks: true,  // Makes the build much quieter
             colors: true    // Shows colors in the console
         })
     );
