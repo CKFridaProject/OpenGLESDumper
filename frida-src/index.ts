@@ -171,15 +171,16 @@ const base64Encode = (p:NativePointer, l: number=0x20): string => {
 }
 
 
-const soname = 'libGLES_mali.so'
 
-const patchGame = () => {
+const patchGame = (info:{[key:string]:any}) => {
 }
 
-const hookGame = () => {
-    const appInfo = getAndroidAppInfo()
+const hookGame = (info:{[key:string]:any}) => {
 
-    const dumpDir = `${appInfo.externalFilesDir}/dumps`;
+    const packageName   = info['app']       ?? 'com.Joymax.GreatMagician';
+    const soname        = info['soname']    ?? 'libGLES_mali.so';
+
+    const dumpDir = `/data/data/${packageName}/files/dumps`;
     let fileNo = 0;
 
     console.log(`dump directory: ${dumpDir}`);
@@ -190,9 +191,106 @@ const hookGame = () => {
 
     const hooksForTexture2D : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
 
-{p:Module.getExportByName(soname,"glCompressedTexImage2D"     ) , name :"glCompressedTexImage2D"    , opts:{}, }, 
+{p:Module.getExportByName(soname,"glCompressedTexImage2D"     ) , name :"glCompressedTexImage2D"    , opts:{
+
+    nparas:9,
+    hide:true,
+
+    // void glCompressedTexImage2D(	GLenum target,
+    //     GLint level,
+    //     GLenum internalformat,
+    //     GLsizei width,
+    //     GLsizei height,
+    //     GLint border,
+    //     GLsizei imageSize,
+    //     const GLvoid * data);
+    enterFun(args, tstr, thiz) {
+        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
+        const level              = thiz.args1.toUInt32();
+        const internalFormat     = findName(thiz.args2.toUInt32(),internalFormats_GLES2);
+        const width              = thiz.args3.toUInt32();
+        const height             = thiz.args4.toUInt32();
+        const border             = thiz.args4.toUInt32();
+        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
+        const dataLength         = thiz.args4.toUInt32();
+        const data               = thiz.args8;
+
+        if(!data.isNull()){
+            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+            console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border},  ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
+            fileNo++;
+            const jsoninfo : DUMP_DATA = {
+                function:"glCompressedTexSubImage2D",
+                data: {
+                    target,
+                    level,
+                    internalFormat,
+                    width,
+                    height,
+                    border,
+                    format,
+                    data: base64Encode(data, dataLength),
+                }
+            }
+
+            const ret = new NativeFunction(cm.writeTextFile, 'int', ['pointer','pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(jsoninfo)));
+        }
+
+
+        
+    },
+
+}, }, 
+
 {p:Module.getExportByName(soname,"glCompressedTexImage3D"     ) , name :"glCompressedTexImage3D"    , opts:{}, }, 
-{p:Module.getExportByName(soname,"glCompressedTexSubImage2D"  ) , name :"glCompressedTexSubImage2D" , opts:{}, }, 
+
+{p:Module.getExportByName(soname,"glCompressedTexSubImage2D"  ) , name :"glCompressedTexSubImage2D" , opts:{
+    nparas:9,
+    hide:true,
+    // void glCompressedTexSubImage2D(	GLenum target,
+    //     GLint level,
+    //     GLint xoffset,
+    //     GLint yoffset,
+    //     GLsizei width,
+    //     GLsizei height,
+    //     GLenum format,
+    //     GLsizei imageSize,
+    //     const GLvoid * data);
+    enterFun(args, tstr, thiz) {
+        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
+        const level              = thiz.args1.toUInt32();
+        const xoffset            = thiz.args3.toUInt32();
+        const yoffset            = thiz.args3.toUInt32();
+        const width              = thiz.args3.toUInt32();
+        const height             = thiz.args4.toUInt32();
+        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
+        const dataLength         = thiz.args4.toUInt32();
+        const data               = thiz.args8;
+
+        if(!data.isNull()){
+            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+            console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
+            fileNo++;
+            const jsoninfo : DUMP_DATA = {
+                function:"glCompressedTexSubImage2D",
+                data: {
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    data: base64Encode(data, dataLength),
+                }
+            }
+
+            const ret = new NativeFunction(cm.writeTextFile, 'int', ['pointer','pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(jsoninfo)));
+        }
+
+    },
+}, }, 
+
 {p:Module.getExportByName(soname,"glCompressedTexSubImage3D"  ) , name :"glCompressedTexSubImage3D" , opts:{}, }, 
 
 {p:Module.getExportByName(soname,"glTexImage2D"     ) , name :"glTexImage2D"    , opts:{
@@ -245,7 +343,58 @@ const hookGame = () => {
 }, }, 
 
 {p:Module.getExportByName(soname,"glTexImage3D"     ) , name :"glTexImage3D"    , opts:{}, }, 
-{p:Module.getExportByName(soname,"glTexSubImage2D"  ) , name :"glTexSubImage2D" , opts:{}, }, 
+
+{p:Module.getExportByName(soname,"glTexSubImage2D"  ) , name :"glTexSubImage2D" , opts:{
+    //void glTexSubImage2D(	GLenum target,
+    //    GLint level,
+    //    GLint xoffset,
+    //    GLint yoffset,
+    //    GLsizei width,
+    //    GLsizei height,
+    //    GLenum format,
+    //    GLenum type,
+    //    const GLvoid * data);
+    nparas:9,
+    hide:true,
+
+    enterFun(args, tstr, thiz) {
+        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
+        const level              = thiz.args1.toUInt32();
+        const xoffset            = thiz.args2.toUInt32();
+        const yoffset            = thiz.args3.toUInt32();
+        const width              = thiz.args4.toUInt32();
+        const height             = thiz.args5.toUInt32();
+        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
+        const type               = findName(thiz.args7.toUInt32(),types_GLES2);
+        const data               = thiz.args8;
+        const dataLength         = calculateDataLength(width, height, format, type)
+
+        if(!data.isNull()){
+            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+            console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
+            fileNo++;
+            const jsoninfo : DUMP_DATA = {
+                function:"glTexSubImage2D",
+                data: {
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    type,
+                    data: base64Encode(data, dataLength),
+                }
+            }
+
+            const ret = new NativeFunction(cm.writeTextFile, 'int', ['pointer','pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(jsoninfo)));
+        }
+
+    },
+
+}, }, 
+
 {p:Module.getExportByName(soname,"glTexSubImage3D"  ) , name :"glTexSubImage3D" , opts:{}, }, 
 
     ];
@@ -261,30 +410,43 @@ const hookGame = () => {
     
 }
 
-const testGame = () => {
+const testGame = (info:{[key:string]:any}) => {
     
 }
 
-const handleSo=()=>{
+const handleSo=(info:{[key:string]:any})=>{
 
-
-    patchGame();
-    hookGame();
-    testGame();
+    patchGame   (info);
+    hookGame    (info);
+    testGame    (info);
 
 }
 
-const test = ()=>{
+const test = (info:{[key:string]:any})=>{
+
+    const soname        = info['soname']    ?? 'libGLES_mali.so';
 
     const m = Process.findModuleByName(soname);
-    if(m){
-        handleSo()
+    if (m) {
+        handleSo(info)
     }
-    else{
-        hookDlopen(soname, handleSo)
+    else {
+        hookDlopen(soname, ()=>{
+            handleSo(info)
+
+        })
     }
 
 }
 
-console.log('##################################################')
-Java.perform(test)
+
+rpc.exports = {
+    init:function(...paras:any){
+        const [stage, info]  = paras;
+        console.log(`${stage} ${JSON.stringify(info)}`)
+        console.log('##################################################')
+        Java.perform(()=>{
+            test(info)
+        })
+    }
+}

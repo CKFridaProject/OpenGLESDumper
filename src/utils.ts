@@ -10,12 +10,55 @@ export interface  glTexImage2D_DATA {
     format         : string;
     type           : string;
     data           : string;
-}
+};
+
+export interface  glTexSubImage2D_DATA {
+    target         : string;
+    level          : number;
+    xoffset        : number;
+    yoffset        : number;
+    width          : number;
+    height         : number;
+    border         : number;
+    format         : string;
+    data           : string;
+};
+
+export interface  glCompreesdTexImage2D_DATA {
+    target         : string;
+    level          : number;
+    internalFormat : string;
+    width          : number;
+    height         : number;
+    border         : number;
+    format         : string;
+    data           : string;
+};
+
+export interface  glCompreesdTexSubImage2D_DATA {
+    target         : string;
+    level          : number;
+    xoffset        : number;
+    yoffset        : number;
+    width          : number;
+    height         : number;
+    format         : string;
+    data           : string;
+};
+
 
 export interface DUMP_DATA {
-    function    : 'glTexImage2D';
+    function    : 'glTexImage2D' 
+                | 'glTexSubImage2D'
+                | 'glCompressedTexImage2D'
+                | 'glCompressedTexSubImage2D'
+                ;
 
-    data        : glTexImage2D_DATA;
+    data        : glTexImage2D_DATA
+                | glTexSubImage2D_DATA
+                | glCompreesdTexImage2D_DATA
+                | glCompreesdTexSubImage2D_DATA
+                ;
         
 }
 
