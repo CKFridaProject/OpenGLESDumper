@@ -411,6 +411,42 @@ const hookGame = (info:{[key:string]:any}) => {
 }
 
 const testGame = (info:{[key:string]:any}) => {
+
+
+    {
+        // get the version of zlib
+        const m = Process.getModuleByName('libz.so')
+        m.enumerateExports()
+            .filter(s=>s.name.includes('zlibVersion'))
+            .forEach(s=>{
+                console.log(`symbol ${s}, ${JSON.stringify(s)}`)
+            })
+        const fun =  new NativeFunction(Module.getExportByName('libz.so','zlibVersion'), 'pointer',[]);
+        console.log('zlib version', fun().readUtf8String());
+    }
+
+    {
+        // get the version of libssl
+        const m = Process.getModuleByName('libssl.so')
+        console.log(`module: ${m} ${JSON.stringify(m)}`)
+        m.enumerateExports()
+            .filter(s=>s.name.includes('version'))
+            .forEach(s=>{
+                console.log(`symbol : ${s} ${JSON.stringify(s)}`)
+            })
+    }
+
+    {
+        Module.load('/data/local/tmp/libz.so.1')
+        Module.load('/data/local/tmp/libcrypto.so.3')
+        Module.load('/data/local/tmp/libssl.so.3')
+        Module.load('/data/local/tmp/libnghttp3.so')
+        Module.load('/data/local/tmp/libnghttp2.so')
+        Module.load('/data/local/tmp/libnghttp3.so')
+        Module.load('/data/local/tmp/libnghttp2.so')
+        Module.load('/data/local/tmp/libssh2.so')
+        Module.load('/data/local/tmp/libcurl.so')
+    }
     
 }
 
@@ -436,6 +472,12 @@ const test = (info:{[key:string]:any})=>{
 
         })
     }
+
+    const loadPatchlib = ()=>{
+
+    }
+
+    loadPatchlib();
 
 }
 
