@@ -31,6 +31,49 @@ import {
 
 let libPatchGame : INFO_TYPE | null = null;
 
+/**
+ * Dump memory contents starting from a given address.
+ * 
+ * @param p The starting address of the memory to dump.
+ * @param l The number of bytes to dump. If not provided, defaults to 32 bytes.
+ */
+const dumpMemory = (p: NativePointer, l: number = 0x20): void => {
+    console.log(
+        hexdump(p, {
+            offset: 0,
+            length: l,
+            header: true,
+            ansi: false,
+        })
+    );
+};
+
+const _frida_dummy = new NativeCallback(function(){
+
+},'void',[]);
+
+const _frida_log =  new NativeCallback(function(sp:NativePointer){
+    console.log(sp.readUtf8String());
+}, 'void', ['pointer']);
+
+const _frida_err =  new NativeCallback(function(sp:NativePointer, exitApp:number){
+    console.error(sp.readUtf8String());
+    if(exitApp){
+        throw 'err occured and exit';
+        new NativeFunction(Module.getExportByName(null,'exit'),'int',['int'])(-9);
+    }
+    else{
+        throw 'err occured';
+    }
+}, 'void', ['pointer','int']);
+
+const _frida_hexdump =  new NativeCallback(function(sp:NativePointer, sz:number){
+    dumpMemory(sp, sz);
+}, 'void', ['pointer','uint']);
+
+
+
+
 export const findFuns = (s:string, ignore_case?:boolean, libs?:string[]) =>{
     libs = libs || [];
     ignore_case = ignore_case || false;
@@ -454,6 +497,49 @@ const handleSo=(info:{[key:string]:any})=>{
 
 }
 
+const loadPatchlib = (info:{[key:string]:any})=> {
+
+    const packageName   = info['app']       ?? 'com.Joymax.GreatMagician';
+    const soname        = info['soname']    ?? 'libGLES_mali.so';
+
+    const dumpDir = `/data/data/${packageName}/files/dumps`;
+
+    if(libPatchGame==null) {
+        {
+            Module.load('/data/local/tmp/libz.so.1')
+            Module.load('/data/local/tmp/libcrypto.so.3')
+            Module.load('/data/local/tmp/libssl.so.3')
+            Module.load('/data/local/tmp/libnghttp3.so')
+            Module.load('/data/local/tmp/libnghttp2.so')
+            Module.load('/data/local/tmp/libnghttp3.so')
+            Module.load('/data/local/tmp/libnghttp2.so')
+            Module.load('/data/local/tmp/libssh2.so')
+            Module.load('/data/local/tmp/libcurl.so')
+        }
+        libPatchGame = libpatchgameinfo.load(
+            '/data/local/tmp/libpatchgame.so',
+            [
+                'libcurl.so',
+            ],
+            {
+                _frida_dummy,
+                _frida_log,
+                _frida_err,
+                _frida_hexdump,
+
+            },
+        )
+        {
+            const m = Process.getModuleByName(soname);
+            new NativeFunction(libPatchGame.symbols.init,'int',['pointer', 'pointer'])(
+                m.base,
+                Memory.allocUtf8String(dumpDir),
+            );
+        }
+    }
+
+}
+
 const test = (info:{[key:string]:any})=>{
 
     const soname        = info['soname']    ?? 'libGLES_mali.so';
@@ -469,34 +555,8 @@ const test = (info:{[key:string]:any})=>{
         })
     }
 
-    const loadPatchlib = ()=>{
 
-        if(libPatchGame==null) {
-            {
-                Module.load('/data/local/tmp/libz.so.1')
-                Module.load('/data/local/tmp/libcrypto.so.3')
-                Module.load('/data/local/tmp/libssl.so.3')
-                Module.load('/data/local/tmp/libnghttp3.so')
-                Module.load('/data/local/tmp/libnghttp2.so')
-                Module.load('/data/local/tmp/libnghttp3.so')
-                Module.load('/data/local/tmp/libnghttp2.so')
-                Module.load('/data/local/tmp/libssh2.so')
-                Module.load('/data/local/tmp/libcurl.so')
-            }
-            libPatchGame = libpatchgameinfo.load(
-                '/data/local/tmp/libpatchgame.so',
-                [
-
-                ],
-                {
-
-                },
-            )
-        }
-
-    }
-
-    loadPatchlib();
+    loadPatchlib(info);
 
 }
 
