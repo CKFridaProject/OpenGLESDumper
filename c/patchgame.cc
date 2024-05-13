@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <curl/curl.h>
+#include <GLES2/gl2.h>
 
 extern "C" void _frida_log(const char* message);
 extern "C" void _frida_err(const char* message, bool exit=false);
@@ -108,5 +109,18 @@ extern "C" int __attribute__((visibility("default"))) init (unsigned char* base,
     auto sz =  get_body_size(url);
     LOG_INFOS("size: %d", sz);
     return 0;
+}
+
+extern "C" void __attribute__((visibility("default"))) hook_glCompressedTexImage2D (
+    GLenum          target,
+    GLint           level,
+    GLenum          internalformat,
+    GLsizei         width,
+    GLsizei         height,
+    GLint           border,
+    GLsizei         imageSize,
+    const GLvoid *  data
+) {
+
 }
 
