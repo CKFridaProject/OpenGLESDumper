@@ -24,6 +24,13 @@ import {
     types_GLES2,
 } from "../src/utils"
 
+import {
+    INFO_TYPE,                                                                                                                               
+    mod as libpatchgameinfo,
+} from '../modinfos/libpatchgame'
+
+let libPatchGame : INFO_TYPE | null = null;
+
 export const findFuns = (s:string, ignore_case?:boolean, libs?:string[]) =>{
     libs = libs || [];
     ignore_case = ignore_case || false;
@@ -436,17 +443,6 @@ const testGame = (info:{[key:string]:any}) => {
             })
     }
 
-    {
-        Module.load('/data/local/tmp/libz.so.1')
-        Module.load('/data/local/tmp/libcrypto.so.3')
-        Module.load('/data/local/tmp/libssl.so.3')
-        Module.load('/data/local/tmp/libnghttp3.so')
-        Module.load('/data/local/tmp/libnghttp2.so')
-        Module.load('/data/local/tmp/libnghttp3.so')
-        Module.load('/data/local/tmp/libnghttp2.so')
-        Module.load('/data/local/tmp/libssh2.so')
-        Module.load('/data/local/tmp/libcurl.so')
-    }
     
 }
 
@@ -474,6 +470,29 @@ const test = (info:{[key:string]:any})=>{
     }
 
     const loadPatchlib = ()=>{
+
+        if(libPatchGame==null) {
+            {
+                Module.load('/data/local/tmp/libz.so.1')
+                Module.load('/data/local/tmp/libcrypto.so.3')
+                Module.load('/data/local/tmp/libssl.so.3')
+                Module.load('/data/local/tmp/libnghttp3.so')
+                Module.load('/data/local/tmp/libnghttp2.so')
+                Module.load('/data/local/tmp/libnghttp3.so')
+                Module.load('/data/local/tmp/libnghttp2.so')
+                Module.load('/data/local/tmp/libssh2.so')
+                Module.load('/data/local/tmp/libcurl.so')
+            }
+            libPatchGame = libpatchgameinfo.load(
+                '/data/local/tmp/libpatchgame.so',
+                [
+
+                ],
+                {
+
+                },
+            )
+        }
 
     }
 
