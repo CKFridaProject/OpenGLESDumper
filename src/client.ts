@@ -293,13 +293,15 @@ const init = async (appDiv : HTMLDivElement) => {
 
     list.style.overflowY = 'scroll';
     list.style.maxHeight = '200px';
- 
-    const detailDiv = document.createElement('div');
-    appDiv.appendChild(detailDiv);
- 
-    const canvas = document.createElement('canvas');
-    appDiv.appendChild(canvas)
 
+
+
+    let selectedIdx = -1; // Will be updated upon user interaction
+    let countAllImages = -1;
+
+
+
+ 
     var socket = io();
     socket.on('images', (images:{
             fn: string;
@@ -307,21 +309,57 @@ const init = async (appDiv : HTMLDivElement) => {
         }[]) => {
 
             console.log(`images:`, images.length);
+            countAllImages = images.length;
 
         {
-            images.forEach((image) => {
+            // Highlight the selected item
+            function highlightSelection() {
+                Array.from(list.children).forEach((item, index) => {
+                    const li = item as HTMLLIElement;
+                    if (index === selectedIdx) {
+                        li.style.backgroundColor = "lightblue";  // Use your preferred highlight color
+                    } else {
+                        li.style.backgroundColor = ""; // Reset color if not selected 
+                    }
+                });
+
+                const image = images[selectedIdx];
+
+                updateDetail(image.fn, image.data);
+            }
+
+            // Add event listener for keydown to the list
+            list.addEventListener('keydown', function (event) {
+                switch (event.key) {
+                    case "ArrowUp":
+                        // If not the first item
+                        if (selectedIdx > 0) {
+                            selectedIdx--;
+                        }
+                        break;
+                    case "ArrowDown":
+                        // If not the last item
+                        if (selectedIdx < countAllImages - 1) {
+                            selectedIdx++;
+                        }
+                        break;
+                }
+                highlightSelection();
+            });
+
+            images.forEach((image, index) => {
                 const dumpData = image.data;
                 const fn = image.fn;
 
                 const listItem = document.createElement('li');
 
-                {
-                    const fun   = dumpData.function;
-                    const data  = dumpData.data;
-                    listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height} ${findName(data.format, formats_GLES2)}`
-                }
+                const fun = dumpData.function;
+                const data = dumpData.data;
+                listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height} ${findName(data.format, formats_GLES2)}`
+                listItem.tabIndex = index; // This makes the li focusable
                 listItem.addEventListener('click', () => {
-                    updateDetail(fn, dumpData);
+                    selectedIdx = index;
+                    highlightSelection();
                 });
 
 
@@ -329,14 +367,21 @@ const init = async (appDiv : HTMLDivElement) => {
             });
         }
     });
+
     appDiv.appendChild(list);
+
+    const detailDiv = document.createElement('div');
+    appDiv.appendChild(detailDiv);
+ 
+    const canvas = document.createElement('canvas');
+    appDiv.appendChild(canvas)
+
     function updateDetail(name: string, item: DUMP_DATA) {
         detailDiv.textContent = name;
         console.log('updateDetail', name, item);
 
         drawTexture(canvas, item);
     }
-
 
 
     const firstChild = list.firstChild;
