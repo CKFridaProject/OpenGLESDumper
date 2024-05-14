@@ -1,7 +1,11 @@
 
+
 #include <stdio.h>
-#include <curl/curl.h>
 #include <GLES2/gl2.h>
+#include <ftw.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <curl/curl.h>
 
 extern "C" void _frida_log(const char* message);
 extern "C" void _frida_err(const char* message, bool exit=false);
@@ -59,9 +63,6 @@ size_t get_body_size(const char *url) {
 
 
 
-static const char base64_table[] = 
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
 extern "C" int __attribute__((visibility("default"))) writeTextFile (const char* filename, char* context) {
     FILE* fp = fopen(filename, "w");
     if (fp == (void*)0) {
@@ -72,55 +73,69 @@ extern "C" int __attribute__((visibility("default"))) writeTextFile (const char*
     return 0;
 }
 
-extern "C" int __attribute__((visibility("default"))) base64_encode (const unsigned char *in, int in_len, char *out, int out_len) {
+
+static const char base64_chars[] =
+             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+             "abcdefghijklmnopqrstuvwxyz"
+             "0123456789+/";
+
+extern "C" int __attribute__((visibility("default"))) base64_encode(const unsigned char *in, int in_len, char *out, int out_len) {
     int i, j;
-    int enc_len = 4 * ((in_len + 2) / 3); // Base64 string length
+    int output_len = 4 * ((in_len + 2) / 3);
 
-    if (out_len < enc_len + 1) { // Check if the output buffer is big enough
-        return -1; // Not enough space
+    if (out != NULL) {
+        for (i = 0, j = 0; i < in_len; i += 3, j += 4) {
+            int a = in[i];
+            int b = (i + 1 < in_len) ? in[i + 1] : 0;
+            int c = (i + 2 < in_len) ? in[i + 2] : 0;
+
+            out[j] = base64_chars[a >> 2];
+            out[j + 1] = base64_chars[((a & 0x03) << 4) | (b >> 4)];
+            out[j + 2] = (i + 1 < in_len) ? base64_chars[((b & 0x0F) << 2) | (c >> 6)] : '=';
+            out[j + 3] = (i + 2 < in_len) ? base64_chars[c & 0x3F] : '=';
+        }
+
+        if (j < out_len) {
+            out[j] = '0';
+        }
     }
 
-    for (i = 0, j = 0; i < in_len;) {
-        unsigned int octet_a = i < in_len ? (unsigned char)in[i++] : 0;
-        unsigned int octet_b = i < in_len ? (unsigned char)in[i++] : 0;
-        unsigned int octet_c = i < in_len ? (unsigned char)in[i++] : 0;
+    return output_len;
+}
 
-        unsigned int triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
 
-        out[j++] = base64_table[(triple >> 3 * 6) & 0x3F];
-        out[j++] = base64_table[(triple >> 2 * 6) & 0x3F];
-        out[j++] = base64_table[(triple >> 1 * 6) & 0x3F];
-        out[j++] = base64_table[(triple >> 0 * 6) & 0x3F];
+int delete_file(const char *path, const struct stat *s, int type, struct FTW *ftwb) {
+    if(remove(path) < 0) {
+        perror("remove");
+        return -1;
+    }
+    return 0;
+}
+
+int delete_and_remake_folder(const char *folder_path) {
+    if (nftw(folder_path, delete_file, 64, FTW_DEPTH | FTW_PHYS) < 0) {
+        perror("nftw");
+        return -1;
     }
 
-    for (i = 0; i < enc_len - j; i++) {
-        out[enc_len - 1 - i] = '='; // Add padding
+    if (mkdir(folder_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0) {
+        perror("mkdir");
+        return -1;
     }
-    out[enc_len] = '0'; // Null-terminate the string
 
-    return enc_len; // Return the length of the Base64 encoded string
+    return 0;
 }
 
 
 extern "C" int __attribute__((visibility("default"))) init (unsigned char* base, const char* outputDir) {
 
+
     LOG_INFOS(" go here %p %s", base, outputDir);
-    const char* url = "http://192.168.2.196:3000/";
-    auto sz =  get_body_size(url);
-    LOG_INFOS("size: %d", sz);
+    delete_and_remake_folder(outputDir);
+
+    //const char* url = "http://192.168.2.196:3000/";
+    //auto sz =  get_body_size(url);
+    //LOG_INFOS("size: %d", sz);
     return 0;
-}
-
-extern "C" void __attribute__((visibility("default"))) hook_glCompressedTexImage2D (
-    GLenum          target,
-    GLint           level,
-    GLenum          internalformat,
-    GLsizei         width,
-    GLsizei         height,
-    GLint           border,
-    GLsizei         imageSize,
-    const GLvoid *  data
-) {
-
 }
 
