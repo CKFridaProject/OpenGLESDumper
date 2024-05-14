@@ -1,5 +1,18 @@
 
-import { DUMP_DATA, formats_GLES2, glTexImage2D_DATA, internalFormats_GLES2, targets_GLES2, types_GLES2 } from "./utils"
+import io from 'socket.io-client';
+
+import { 
+    DUMP_DATA, 
+    findName,
+    formats_GLES2, 
+    glCompreesdTexImage2D_DATA, 
+    glCompreesdTexSubImage2D_DATA, 
+    glTexImage2D_DATA, 
+    glTexSubImage2D_DATA, 
+    internalFormats_GLES2, 
+    targets_GLES2, 
+    types_GLES2 
+} from "./utils"
 
 const findValue = (name: string, names: { [key: string]: number }): number | undefined => {
     return names[name];
@@ -56,42 +69,95 @@ const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
 
     let texture = gl.createTexture();
 
+    let target = gl.TEXTURE_2D;
+
     switch(fun){
         case 'glTexImage2D': {
             const data = dumpData.data as glTexImage2D_DATA;
-            console.log('data', data);
             const pixelData = base64ToUint8Array(data.data)
-            const internalFormat = internalFormats_GLES2[data.internalFormat] || gl.RGBA;
-            console.log('internalFormat', internalFormat)
-            const target = targets_GLES2[data.target] || gl.TEXTURE_2D;
+            // target = data.target;
             gl.bindTexture(target, texture);
-            console.log('target', target, gl.TEXTURE_2D)
             gl.texImage2D(
                 target,
                 data.level,
-                internalFormat,
+                data.internalFormat,
                 data.width, 
                 data.height, 
                 data.border, 
-                formats_GLES2[data.format] || gl.RGBA,
-                types_GLES2[data.type] || gl.UNSIGNED_BYTE,
+                data.format,
+                data.type,
                 pixelData);
-
         }
         break;
+
+        case 'glTexSubImage2D': {
+            const data = dumpData.data as glTexSubImage2D_DATA;
+            const pixelData = base64ToUint8Array(data.data)
+            // target = data.target;
+            gl.bindTexture(target, texture);
+            gl.texImage2D(
+                target,
+                data.level,       // level
+                data.format,      // internalFormat
+                data.width,       // width
+                data.height,      // height
+                0,                // border
+                data.format,      // format
+                data.type,        // type
+                null              // data (null for an empty texture)
+              );
+            gl.texSubImage2D(
+                data.target,
+                data.level,
+                data.xoffset,
+                data.yoffset,
+                data.width, 
+                data.height, 
+                data.format,
+                data.type,
+                pixelData);
+        }
+        break;
+
+
+        case 'glCompressedTexSubImage2D':{
+            const data = dumpData.data as glCompreesdTexSubImage2D_DATA;
+            // target = data.target;
+            gl.bindTexture(target, texture);
+            const pixelData = base64ToUint8Array(data.data)
+            console.log(
+                'target', data.target,  findName(data.target, targets_GLES2), gl.TEXTURE_2D,
+                'level', data.level, 
+                'xoffset', data.xoffset, 
+                'yoffset', data.yoffset, 
+                'width', data.width, 
+                'height', data.height, 
+                'format', data.format, findName(data.format, formats_GLES2),
+                'pixelData', pixelData);
+            gl.compressedTexSubImage2D(
+                data.target,
+                data.level,
+                data.xoffset,
+                data.yoffset,
+                data.width, 
+                data.height, 
+                data.format,
+                pixelData);
+        }
+        break;
+
+        default:
+            console.log('unknown function: ' + fun);
     }
 
 
     // Set the parameters so we can render any size image
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
     // Upload an empty 1x1 texture
-    let pixel = new Uint8Array([0, 0, 255, 255]);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-
     // create a simple 2d drawing program
     let vertexShader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vertexShader, `
@@ -154,7 +220,7 @@ const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
     // draw the rectangle
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.bindTexture(target, texture);
     gl.uniform1i(textureLocation, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
@@ -164,61 +230,55 @@ const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
 
 const init = async (appDiv : HTMLDivElement) => {
 
-    const list = document.createElement('ul');
 
+    const list = document.createElement('ul');
+ 
     const detailDiv = document.createElement('div');
     appDiv.appendChild(detailDiv);
-
+ 
     const canvas = document.createElement('canvas');
     appDiv.appendChild(canvas)
 
-    const dumpListUrl='/dumps.json'
+    var socket = io();
+    socket.on('images', (images:{
+            fn: string;
+            data: DUMP_DATA;
+        }[]) => {
 
-    const dumplist = await fetch(dumpListUrl).then(res => res.json());
-
-    console.log('dumplist', dumplist.length)
-
-    let dumpsObj: { [key: string]: any } = {};
-
-    const allItems = dumplist.map(async (item: string) => {
-        const dumpUrl = `dumps/${item}`;
-        const response = await fetch(dumpUrl);
-        const data = await response.json();
-
-        dumpsObj[item] = data;
-    });
-
-    await Promise.all(allItems)
-
-    Object.keys(dumpsObj).forEach(key => {
-        const dumpData = dumpsObj[key]  as DUMP_DATA;
-
-        const listItem = document.createElement('li');
+            console.log(`images:`, images.length);
 
         {
-            const  fun  = dumpData.function;
-            if(fun == 'glTexImage2D'){
-                const data = dumpData.data as glTexImage2D_DATA;
-                const text = `${key} ${fun} ${data.level} ${data.internalFormat} ${data.width} ${data.height} ${data.format} ${data.type} `
-                listItem.textContent = text
-            }
+            images.forEach((image) => {
+                const dumpData = image.data;
+                const key = image.fn;
+
+                const listItem = document.createElement('li');
+
+                {
+                    const fun = dumpData.function;
+                    if (fun == 'glTexImage2D') {
+                        const data = dumpData.data as glTexImage2D_DATA;
+                        listItem.textContent = `${key} ${fun} ${data.level} ${data.internalFormat} ${data.width} ${data.height} ${data.format} ${data.type} `
+                    }
+                    else{
+                        listItem.textContent = `${key} `
+                    }
+                }
+                listItem.addEventListener('click', () => {
+                    updateDetail(key, dumpData);
+                });
+
+
+                list.appendChild(listItem);
+            });
         }
-        listItem.addEventListener('click', () => {
-            updateDetail(key,dumpData);
-        });
-
-
-        list.appendChild(listItem);
     });
-    
     appDiv.appendChild(list);
-
-
-
-    function updateDetail(name:string,item: DUMP_DATA) {
+    function updateDetail(name: string, item: DUMP_DATA) {
         detailDiv.textContent = name;
+        console.log('updateDetail', name, item);
 
-        drawTexture(canvas,item);
+        drawTexture(canvas, item);
     }
 
 
@@ -232,7 +292,7 @@ const init = async (appDiv : HTMLDivElement) => {
 }
 
 const appDiv = document.getElementById('app') as HTMLDivElement;
-if(appDiv){
+if (appDiv) {
 
     init(appDiv)
 

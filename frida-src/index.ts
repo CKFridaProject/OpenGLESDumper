@@ -15,13 +15,17 @@ import {
 
 import {
     DUMP_DATA,
+    findName,
     bytesPerPixel_formats_GLES2,
     bytesPerPixel_types_GLES2,
     formats_GLES2,
     glTexImage2D_DATA,
+    glTexSubImage2D_DATA,
     internalFormats_GLES2,
     targets_GLES2,
     types_GLES2,
+    glCompreesdTexSubImage2D_DATA,
+    glCompreesdTexImage2D_DATA,
 } from "../src/utils"
 
 import {
@@ -111,10 +115,6 @@ export const findFuns = (s:string, ignore_case?:boolean, libs?:string[]) =>{
 }
 
 
-const findName = (n:number, names: {[key:string]:number}):string => {
-    return Object.keys(names).find(k => names[k] == n) || `unknow 0x${n.toString(16).toUpperCase()}`;
-}
-
 function calculateDataLength(width: number, height: number, format: string, type: string): number {
 
     if (!bytesPerPixel_formats_GLES2[format]) {
@@ -154,6 +154,10 @@ const base64Encode = (p:NativePointer, l: number=0x20): string => {
 const writeJsonInfo = (fn:string, jsoninfo:DUMP_DATA) => {
     if (libPatchGame) {
         const ret = new NativeFunction(libPatchGame.symbols.writeTextFile, 'int', ['pointer', 'pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(jsoninfo)));
+        if(ret<0){
+            console.log(`write file ${fn} failed ${ret}`)
+
+        }
     }
 }
 
@@ -191,35 +195,35 @@ const hookGame = (info:{[key:string]:any}) => {
     //     GLsizei imageSize,
     //     const GLvoid * data);
     enterFun(args, tstr, thiz) {
-        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
+        const target             = thiz.args0.toUInt32();
         const level              = thiz.args1.toUInt32();
-        const internalFormat     = findName(thiz.args2.toUInt32(),internalFormats_GLES2);
+        const internalFormat     = thiz.args2.toUInt32();
         const width              = thiz.args3.toUInt32();
         const height             = thiz.args4.toUInt32();
-        const border             = thiz.args4.toUInt32();
-        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
-        const dataLength         = thiz.args4.toUInt32();
+        const border             = thiz.args5.toUInt32();
+        const format             = thiz.args6.toUInt32();
+        const dataLength         = thiz.args7.toUInt32();
         const data               = thiz.args8;
 
         if(!data.isNull()){
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
             console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border},  ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
             fileNo++;
-            const jsoninfo : DUMP_DATA = {
-                function:"glCompressedTexSubImage2D",
-                data: {
-                    target,
-                    level,
-                    internalFormat,
-                    width,
-                    height,
-                    border,
-                    format,
-                    data: base64Encode(data, dataLength),
-                }
+            const dumpdata : glCompreesdTexImage2D_DATA = {
+                target,
+                level,
+                internalFormat,
+                width,
+                height,
+                border,
+                format,
+                data: base64Encode(data, dataLength),
             }
 
-            writeJsonInfo(fn, jsoninfo); fileNo++;
+            writeJsonInfo(fn, {
+                function : "glCompressedTexImage2D",
+                data : dumpdata,
+            }); fileNo++;
 
         }
 
@@ -244,35 +248,35 @@ const hookGame = (info:{[key:string]:any}) => {
     //     GLsizei imageSize,
     //     const GLvoid * data);
     enterFun(args, tstr, thiz) {
-        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
+        const target             = thiz.args0.toUInt32();
         const level              = thiz.args1.toUInt32();
-        const xoffset            = thiz.args3.toUInt32();
+        const xoffset            = thiz.args2.toUInt32();
         const yoffset            = thiz.args3.toUInt32();
-        const width              = thiz.args3.toUInt32();
-        const height             = thiz.args4.toUInt32();
-        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
-        const dataLength         = thiz.args4.toUInt32();
+        const width              = thiz.args4.toUInt32();
+        const height             = thiz.args5.toUInt32();
+        const format             = thiz.args6.toUInt32();
+        const dataLength         = thiz.args7.toUInt32();
         const data               = thiz.args8;
 
         if(!data.isNull()){
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
             console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
             fileNo++;
-            const jsoninfo : DUMP_DATA = {
-                function:"glCompressedTexSubImage2D",
-                data: {
-                    target,
-                    level,
-                    xoffset,
-                    yoffset,
-                    width,
-                    height,
-                    format,
-                    data: base64Encode(data, dataLength),
-                }
-            }
+            const dumpdata : glCompreesdTexSubImage2D_DATA = {
+                target,
+                level,
+                xoffset,
+                yoffset,
+                width,
+                height,
+                format,
+                data: base64Encode(data, dataLength),
 
-            writeJsonInfo(fn, jsoninfo); fileNo++;
+            };
+            writeJsonInfo(fn, {
+                function:"glCompressedTexSubImage2D",
+                data:dumpdata,
+            }); fileNo++;
 
         }
 
@@ -294,23 +298,26 @@ const hookGame = (info:{[key:string]:any}) => {
     //     const GLvoid * data);
     hide:true,
     enterFun(args, tstr, thiz) {
-        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
-        const level              = thiz.args1.toUInt32();
-        const internalFormat     = findName(thiz.args2.toUInt32(),internalFormats_GLES2);
-        const width              = thiz.args3.toUInt32();
-        const height             = thiz.args4.toUInt32();
-        const border             = thiz.args5.toUInt32();
-        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
-        const type               = findName(thiz.args7.toUInt32(),types_GLES2);
-        const data               = thiz.args8;
-        const dataLength         = calculateDataLength(width, height, format, type)
+        const target           :number  = thiz.args0.toUInt32();
+        const level            :number  = thiz.args1.toUInt32();
+        const internalFormat   :number  = thiz.args2.toUInt32();
+        const width            :number  = thiz.args3.toUInt32();
+        const height           :number  = thiz.args4.toUInt32();
+        const border           :number  = thiz.args5.toUInt32();
+        const format           :number  = thiz.args6.toUInt32();
+        const type             :number  = thiz.args7.toUInt32();
+        const data             :NativePointer  = thiz.args8;
+        const dataLength         = calculateDataLength(
+            width, 
+            height, 
+            findName(format, formats_GLES2),
+            findName(type, types_GLES2),
+        )
 
         if(!data.isNull()){
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
             console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
-            const jsoninfo : DUMP_DATA = {
-                function:"glTexImage2D",
-                data: {
+            const dumpdata : glTexImage2D_DATA = {
                     target,
                     level,
                     internalFormat,
@@ -320,11 +327,12 @@ const hookGame = (info:{[key:string]:any}) => {
                     format,
                     type,
                     data: base64Encode(data, dataLength),
-                }
-
             }
 
-            writeJsonInfo(fn, jsoninfo); fileNo++;
+            writeJsonInfo(fn, {
+                function:"glTexImage2D",
+                data : dumpdata,
+            }); fileNo++;
 
         }
 
@@ -347,37 +355,42 @@ const hookGame = (info:{[key:string]:any}) => {
     hide:true,
 
     enterFun(args, tstr, thiz) {
-        const target             = findName(thiz.args0.toUInt32(),targets_GLES2);
-        const level              = thiz.args1.toUInt32();
-        const xoffset            = thiz.args2.toUInt32();
-        const yoffset            = thiz.args3.toUInt32();
-        const width              = thiz.args4.toUInt32();
-        const height             = thiz.args5.toUInt32();
-        const format             = findName(thiz.args6.toUInt32(),formats_GLES2);
-        const type               = findName(thiz.args7.toUInt32(),types_GLES2);
-        const data               = thiz.args8;
-        const dataLength         = calculateDataLength(width, height, format, type)
+        const target  :number           = thiz.args0.toUInt32();
+        const level   :number           = thiz.args1.toUInt32();
+        const xoffset :number           = thiz.args2.toUInt32();
+        const yoffset :number           = thiz.args3.toUInt32();
+        const width   :number           = thiz.args4.toUInt32();
+        const height  :number           = thiz.args5.toUInt32();
+        const format  :number           = thiz.args6.toUInt32();
+        const type    :number           = thiz.args7.toUInt32();
+        const data    :NativePointer    = thiz.args8;
+        const dataLength :number        = calculateDataLength(
+            width, 
+            height, 
+            findName(format,    formats_GLES2), 
+            findName(type,      types_GLES2),
+        )
 
         if(!data.isNull()){
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
             console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
             fileNo++;
-            const jsoninfo : DUMP_DATA = {
-                function:"glTexSubImage2D",
-                data: {
-                    target,
-                    level,
-                    xoffset,
-                    yoffset,
-                    width,
-                    height,
-                    format,
-                    type,
-                    data: base64Encode(data, dataLength),
-                }
+            const dumpdata : glTexSubImage2D_DATA = {
+                target,
+                level,
+                xoffset,
+                yoffset,
+                width,
+                height,
+                format,
+                type,
+                data: base64Encode(data, dataLength),
             }
 
-            writeJsonInfo(fn, jsoninfo); fileNo++;
+            writeJsonInfo(fn, {
+                function:"glTexSubImage2D",
+                data : dumpdata,
+            }); fileNo++;
 
         }
 

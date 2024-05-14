@@ -1,48 +1,48 @@
 
 
 export interface  glTexImage2D_DATA {
-    target         : string;
+    target         : number;
     level          : number;
-    internalFormat : string;
+    internalFormat : number;
     width          : number;
     height         : number;
     border         : number;
-    format         : string;
-    type           : string;
+    format         : number;
+    type           : number;
     data           : string;
 };
 
 export interface  glTexSubImage2D_DATA {
-    target         : string;
+    target         : number;
     level          : number;
     xoffset        : number;
     yoffset        : number;
     width          : number;
     height         : number;
-    border         : number;
-    format         : string;
+    format         : number;
+    type           : number;
     data           : string;
 };
 
 export interface  glCompreesdTexImage2D_DATA {
-    target         : string;
+    target         : number;
     level          : number;
-    internalFormat : string;
+    internalFormat : number;
     width          : number;
     height         : number;
     border         : number;
-    format         : string;
+    format         : number;
     data           : string;
 };
 
 export interface  glCompreesdTexSubImage2D_DATA {
-    target         : string;
+    target         : number;
     level          : number;
     xoffset        : number;
     yoffset        : number;
     width          : number;
     height         : number;
-    format         : string;
+    format         : number;
     data           : string;
 };
 
@@ -207,3 +207,7 @@ export const bytesPerPixel_formats_GLES2: {[key:string]:number} = {
     GL_ALPHA                      : 1,
 
 };
+
+export const findName = (n:number, names: {[key:string]:number}):string => {
+    return Object.keys(names).find(k => names[k] == n) || `unknow 0x${n.toString(16).toUpperCase()}`;
+}

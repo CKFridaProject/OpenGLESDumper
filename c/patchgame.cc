@@ -60,19 +60,15 @@ size_t get_body_size(const char *url) {
 }
 
 
-
-
-
 extern "C" int __attribute__((visibility("default"))) writeTextFile (const char* filename, char* context) {
     FILE* fp = fopen(filename, "w");
     if (fp == (void*)0) {
         return -1;
     }
-    fprintf(fp, "%s", context);
+    int ret = fprintf(fp, "%s", context);
     fclose(fp);
-    return 0;
+    return ret;
 }
-
 
 static const char base64_chars[] =
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

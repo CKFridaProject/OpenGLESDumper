@@ -8,6 +8,11 @@ import webpack from 'webpack';
 import webpackDevMiddleware from 'webpack-dev-middleware';
 import webpackHotMiddleware from 'webpack-hot-middleware';
 import config from '../webpack.config';
+import {
+    DUMP_DATA,
+}  from './utils';
+import * as child_process from 'child_process';
+import * as fs from 'fs';
 
 
 const app = express();
@@ -42,22 +47,58 @@ app.use(webpackDevMiddleware(compiler, {
 }));
 app.use(webpackHotMiddleware(compiler));
 
-let images: Array<{ id: number; data: Buffer; }> = [];
+let images: Array<{ fn: string; data: DUMP_DATA; }> = [];
+
+const pullDumps = (packageName:string, dumpDir:string) => {
+    const cmd = `rm -fr ${dumpDir} && mkdir ${dumpDir} && adb pull /data/data/${packageName}/files/dumps .`;
+    console.log(`command: ${cmd}`);
+    child_process.execSync(cmd, { stdio: 'inherit' });
+}
+
+const updataImages = (dumpDir:string) => {
+    images =[]
+    const dumpFiles = fs.readdirSync(dumpDir);
+    const jsonFiles = dumpFiles.filter(fn => fn.endsWith('.json'));
+    for (const fn of jsonFiles) {
+        const data = JSON.parse(fs.readFileSync(path.join(dumpDir, fn), 'utf-8')) as DUMP_DATA;
+        images.push({ fn, data });
+    }
+}
+
 
 app.get('/ping', (req, res) => {
     res.send('Hello World!');
 })
 
+app.get('/pull', (req, res) => {
+    const query = req.query as { [key: string]: string };
+    const packageName = query.p ?? 'com.Joymax.GreatMagician';
+    const dumpDir = `${process.cwd()}/dumps`;
+    pullDumps(packageName, dumpDir);
+    const files = fs.readdirSync(dumpDir).filter(f => f.endsWith('.json'));
+    res.json({ count: files.length });
+});
+
+app.get('/refresh', (req, res) => {
+    const dumpDir = `${process.cwd()}/dumps`;
+    updataImages(dumpDir);
+    res.json({ count:images.length, files : images.map(i => i.fn) });
+});
+
+
 app.post('/upload', upload.single('image'), (req, res) => {
     if (req.file === undefined) {
         return res.status(400).end();
     }
-    images.push({ id: images.length, data: req.file.buffer });
-    io.emit('new image', images[images.length - 1]);
-    res.status(200).end();
+    // images.push({ id: images.length, data: req.file.buffer });
+    // io.emit('new image', images[images.length - 1]);
+    // res.status(200).end();
+    res.status(500).end();
 });
 
 io.on('connection', (socket) => {
+    const dumpDir = `${process.cwd()}/dumps`;
+    updataImages(dumpDir);
     socket.emit('images', images);
 });
 
