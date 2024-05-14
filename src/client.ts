@@ -64,12 +64,69 @@ const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
     canvas.height = height;
 
     let gl :any = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    // Check if the extension is available
+    let ext_etc = gl.getExtension('WEBGL_compressed_texture_etc');
+    if (!ext_etc) {
+        alert('WEBGL_compressed_texture_etc not available');
+    }
+
+    // Check if the extension is available
+    let ext_astc = gl.getExtension('WEBGL_compressed_texture_astc');
+    if (!ext_astc) {
+        alert('WEBGL_compressed_texture_astc is not available');
+    }
+
+    function calcCompressedDataLength(width: number, height: number, format: number): number {
+        let blockSizeInBits: number;
+
+        switch (format) {
+            case ext_etc.COMPRESSED_RGB8_ETC2:
+                blockSizeInBits = 64; // ETC2 uses 4x4 blocks at 64 bits/block
+                break;
+            case ext_etc.COMPRESSED_RGBA8_ETC2_EAC:
+                blockSizeInBits = 128; // ETC2 uses 4x4 blocks at 128 bits/block for RGBA8
+                break;
+            case ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR:
+                blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
+                break;
+            case ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR:
+                blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
+                break;
+            default:
+                throw new Error('Unsupported format ' + format);
+        }
+
+        const blockSizeInBytes = blockSizeInBits / 8;
+        const numBlocksAcross = Math.ceil(width / 4); // both ETC2 and ASTC use 4x4 blocks
+        const numBlocksDown = Math.ceil(height / 4); // both ETC2 and ASTC use 4x4 blocks
+        const numBlocks = numBlocksAcross * numBlocksDown;
+
+        return numBlocks * blockSizeInBytes;
+    }
+
+    function isPowerOf2(value:number) {
+        // If value is power of two, the bitwise AND operation (&) of value and (value - 1) will be zero.                                    
+        // It works because powers of two in binary form always have just one bit set. The rest of the bits are zero.                        
+        // So, (value & (value - 1)) will be zero for power of two values.                                                                   
+        // For example, 4 in binary is 100, and 3 in binary is 011. And bitwise AND of 4 and 3 is 000.                                       
+        return (value & (value - 1)) == 0;
+    }
+
 
     gl.viewport(0, 0, width, height);
+    let target = gl.TEXTURE_2D;
 
     let texture = gl.createTexture();
 
-    let target = gl.TEXTURE_2D;
+
+    function getGlCompressImageFormat(format: number) {
+        const formatName = findName(format, formats_GLES2);
+        if(formatName === 'GL_COMPRESSED_RGB8_ETC2'           ) return ext_etc .COMPRESSED_RGB8_ETC2;
+        if(formatName === 'GL_COMPRESSED_RGBA8_ETC2_EAC'      ) return ext_etc .COMPRESSED_RGBA8_ETC2_EAC;
+        if(formatName === 'GL_COMPRESSED_RGBA_ASTC_4x4_KHR'   ) return ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR;
+        if(formatName === 'GL_COMPRESSED_RGBA_ASTC_8x8_KHR'   ) return ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR;
+        throw new Error(`Unknown format ${format}`);
+    }
 
     switch(fun){
         case 'glTexImage2D': {
@@ -125,24 +182,26 @@ const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
             // target = data.target;
             gl.bindTexture(target, texture);
             const pixelData = base64ToUint8Array(data.data)
-            console.log(
-                'target', data.target,  findName(data.target, targets_GLES2), gl.TEXTURE_2D,
-                'level', data.level, 
-                'xoffset', data.xoffset, 
-                'yoffset', data.yoffset, 
-                'width', data.width, 
-                'height', data.height, 
-                'format', data.format, findName(data.format, formats_GLES2),
-                'pixelData', pixelData);
-            gl.compressedTexSubImage2D(
-                data.target,
-                data.level,
-                data.xoffset,
-                data.yoffset,
-                data.width, 
-                data.height, 
-                data.format,
-                pixelData);
+            const glFormat = getGlCompressImageFormat(data.format);
+            console.log('target', data.target,  findName(data.target, targets_GLES2), gl.TEXTURE_2D,)
+            console.log('level', data.level, )
+            console.log('xoffset', data.xoffset, )
+            console.log('yoffset', data.yoffset, )
+            console.log('width', data.width, )
+            console.log('height', data.height,) 
+            console.log('format', data.format, findName(data.format, formats_GLES2), glFormat)
+            console.log('pixelData', pixelData);
+            const pixelDataLength = calcCompressedDataLength(data.width, data.height, glFormat);
+            //if(isPowerOf2(width) && isPowerOf2(height)) gl.generateMipmap(gl.TEXTURE_2D);
+            gl.compressedTexImage2D(
+                target, 
+                0,
+                glFormat, 
+                width, 
+                height, 
+                0, 
+                pixelData.slice(0,pixelDataLength),
+            );
         }
         break;
 
@@ -151,13 +210,12 @@ const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
     }
 
 
-    // Set the parameters so we can render any size image
+    // Clamp to edge and use linear filtering.                                                                                   
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    // Upload an empty 1x1 texture
     // create a simple 2d drawing program
     let vertexShader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vertexShader, `
@@ -232,6 +290,9 @@ const init = async (appDiv : HTMLDivElement) => {
 
 
     const list = document.createElement('ul');
+
+    list.style.overflowY = 'scroll';
+    list.style.maxHeight = '200px';
  
     const detailDiv = document.createElement('div');
     appDiv.appendChild(detailDiv);
@@ -250,22 +311,17 @@ const init = async (appDiv : HTMLDivElement) => {
         {
             images.forEach((image) => {
                 const dumpData = image.data;
-                const key = image.fn;
+                const fn = image.fn;
 
                 const listItem = document.createElement('li');
 
                 {
-                    const fun = dumpData.function;
-                    if (fun == 'glTexImage2D') {
-                        const data = dumpData.data as glTexImage2D_DATA;
-                        listItem.textContent = `${key} ${fun} ${data.level} ${data.internalFormat} ${data.width} ${data.height} ${data.format} ${data.type} `
-                    }
-                    else{
-                        listItem.textContent = `${key} `
-                    }
+                    const fun   = dumpData.function;
+                    const data  = dumpData.data;
+                    listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height} ${findName(data.format, formats_GLES2)}`
                 }
                 listItem.addEventListener('click', () => {
-                    updateDetail(key, dumpData);
+                    updateDetail(fn, dumpData);
                 });
 
 
