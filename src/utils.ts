@@ -1,5 +1,23 @@
 
 
+export interface Texture_DATA {
+    type    : 'Texture2D',
+    levels  : {[key:number]: {
+        pixels:{
+            xoffset: number,
+            yoffset: number,
+            width  : number,
+            height : number,
+            data   : string, 
+            format?: number,
+            type  ?: number,
+        }[],
+        width  : number,
+        height : number,
+        internalFormat: number,
+    }},
+}
+
 export interface  glTexImage2D_DATA {
     target         : number;
     level          : number;
@@ -31,7 +49,6 @@ export interface  glCompreesdTexImage2D_DATA {
     width          : number;
     height         : number;
     border         : number;
-    format         : number;
     data           : string;
 };
 

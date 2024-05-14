@@ -22,6 +22,7 @@ import {
     glTexImage2D_DATA,
     glTexSubImage2D_DATA,
     internalFormats_GLES2,
+    Texture_DATA,
     targets_GLES2,
     types_GLES2,
     glCompreesdTexSubImage2D_DATA,
@@ -140,6 +141,7 @@ function calculateDataLength(width: number, height: number, format: string, type
 const base64Encode = (p:NativePointer, l: number=0x20): string => {
 
     if(libPatchGame){
+        // console.log('base64Encode', p, l)
         const fun = new NativeFunction(libPatchGame.symbols.base64_encode,'int',['pointer','int','pointer','int']);
         const out_len = fun(p, l, ptr(0), 0);
         const buffer =  Memory.alloc(out_len+0x10);   
@@ -156,7 +158,6 @@ const writeJsonInfo = (fn:string, jsoninfo:DUMP_DATA) => {
         const ret = new NativeFunction(libPatchGame.symbols.writeTextFile, 'int', ['pointer', 'pointer'])(Memory.allocUtf8String(fn), Memory.allocUtf8String(JSON.stringify(jsoninfo)));
         if(ret<0){
             console.log(`write file ${fn} failed ${ret}`)
-
         }
     }
 }
@@ -165,6 +166,7 @@ const writeJsonInfo = (fn:string, jsoninfo:DUMP_DATA) => {
 const patchGame = (info:{[key:string]:any}) => {
 }
 
+let allTextures : {[key:number]:Texture_DATA} = {};
 const hookGame = (info:{[key:string]:any}) => {
 
     const packageName   = info['app']       ?? 'com.Joymax.GreatMagician';
@@ -172,6 +174,7 @@ const hookGame = (info:{[key:string]:any}) => {
 
     const dumpDir = `/data/data/${packageName}/files/dumps`;
     let fileNo = 0;
+    let currentTexture2DId = 0;
 
     console.log(`dump directory: ${dumpDir}`);
 
@@ -180,6 +183,19 @@ const hookGame = (info:{[key:string]:any}) => {
     system(Memory.allocUtf8String(`rm -fr ${dumpDir} && mkdir -p ${dumpDir}`));
 
     const hooksForTexture2D : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
+
+{p:Module.getExportByName(soname,"glBindTexture"     ) , name :"glBindTexture"    , opts:{
+    // void glBindTexture(	GLenum target,
+    //     GLuint texture);
+    hide:true,
+    enterFun(args, tstr, thiz) {
+        const target  = thiz.args0.toUInt32();
+        const texture = thiz.args1.toUInt32();
+        if(target == targets_GLES2['GL_TEXTURE_2D']){
+            currentTexture2DId = texture;
+        }
+    },
+},},
 
 {p:Module.getExportByName(soname,"glCompressedTexImage2D"     ) , name :"glCompressedTexImage2D"    , opts:{
 
@@ -201,33 +217,67 @@ const hookGame = (info:{[key:string]:any}) => {
         const width              = thiz.args3.toUInt32();
         const height             = thiz.args4.toUInt32();
         const border             = thiz.args5.toUInt32();
-        const format             = thiz.args6.toUInt32();
-        const dataLength         = thiz.args7.toUInt32();
-        const data               = thiz.args8;
+        const dataLength         = thiz.args6.toUInt32();
+        const data               = thiz.args7;
 
-        if(!data.isNull()){
-            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-            console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border},  ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
-            fileNo++;
-            const dumpdata : glCompreesdTexImage2D_DATA = {
-                target,
-                level,
-                internalFormat,
-                width,
-                height,
-                border,
-                format,
-                data: base64Encode(data, dataLength),
+        if (1) {
+
+            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId!=0) {
+
+                let textureItem = allTextures[currentTexture2DId];
+                if(textureItem==undefined){
+                    allTextures[currentTexture2DId] = {
+                        type : "Texture2D",
+                        levels : {},
+                    }
+                    textureItem = allTextures[currentTexture2DId];
+                }
+
+                let levelItem = textureItem.levels[level];
+                if(levelItem==undefined){
+                    textureItem.levels[level] = {
+                        width,
+                        height,
+                        internalFormat,
+                        pixels:[],
+                    };
+                    levelItem = textureItem.levels[level];
+                }
+
+                if(!data.isNull()){
+                    const pixData= base64Encode(data, dataLength);
+                    textureItem.levels[level].pixels=[{
+                        width,height,
+                        xoffset:0, yoffset:0,
+                        data:pixData,
+                    }]
+                }
+
             }
-
-            writeJsonInfo(fn, {
-                function : "glCompressedTexImage2D",
-                data : dumpdata,
-            }); fileNo++;
-
         }
 
+        if (1) {
+            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+            console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border}, ${data}) dataLength ${dataLength} => ${fn}`);
+            if (!data.isNull()) {
+                fileNo++;
+                const dumpdata: glCompreesdTexImage2D_DATA = {
+                    target,
+                    level,
+                    internalFormat,
+                    width,
+                    height,
+                    border,
+                    data: base64Encode(data, dataLength),
+                }
 
+                writeJsonInfo(fn, {
+                    function: "glCompressedTexImage2D",
+                    data: dumpdata,
+                }); fileNo++;
+
+            }
+        }
         
     },
 
@@ -258,26 +308,55 @@ const hookGame = (info:{[key:string]:any}) => {
         const dataLength         = thiz.args7.toUInt32();
         const data               = thiz.args8;
 
-        if(!data.isNull()){
+        if (1) {
+
+            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
+
+                let textureItem = allTextures[currentTexture2DId];
+                if (textureItem != undefined) {
+
+                    let levelItem = textureItem.levels[level];
+                    if (levelItem != undefined) {
+
+                        if (!data.isNull()) {
+                            const pixData = base64Encode(data, dataLength);
+                            textureItem.levels[level].pixels = [{
+                                width, height,
+                                xoffset, yoffset,
+                                data: pixData,
+                                format,
+                            }]
+                        }
+
+                    }
+                }
+            }
+        }
+
+
+        if (1) {
+
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
             console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
-            fileNo++;
-            const dumpdata : glCompreesdTexSubImage2D_DATA = {
-                target,
-                level,
-                xoffset,
-                yoffset,
-                width,
-                height,
-                format,
-                data: base64Encode(data, dataLength),
+            if (!data.isNull()) {
+                fileNo++;
+                const dumpdata: glCompreesdTexSubImage2D_DATA = {
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    data: base64Encode(data, dataLength),
 
-            };
-            writeJsonInfo(fn, {
-                function:"glCompressedTexSubImage2D",
-                data:dumpdata,
-            }); fileNo++;
+                };
+                writeJsonInfo(fn, {
+                    function: "glCompressedTexSubImage2D",
+                    data: dumpdata,
+                }); fileNo++;
 
+            }
         }
 
     },
@@ -296,7 +375,7 @@ const hookGame = (info:{[key:string]:any}) => {
     //     GLenum format,
     //     GLenum type,
     //     const GLvoid * data);
-    hide:true,
+    hide:false,
     enterFun(args, tstr, thiz) {
         const target           :number  = thiz.args0.toUInt32();
         const level            :number  = thiz.args1.toUInt32();
@@ -314,10 +393,50 @@ const hookGame = (info:{[key:string]:any}) => {
             findName(type, types_GLES2),
         )
 
-        if(!data.isNull()){
-            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-            console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
-            const dumpdata : glTexImage2D_DATA = {
+        if (1) {
+
+            console.log(tstr, `glTexImage2D( ${target}  ${targets_GLES2['GL_TEXTURE_2D']}, ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength}, ${currentTexture2DId}`);
+
+            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId!=0) {
+
+                let textureItem = allTextures[currentTexture2DId];
+                if(textureItem==undefined){
+                    allTextures[currentTexture2DId] = {
+                        type : "Texture2D",
+                        levels : {},
+                    }
+                    textureItem = allTextures[currentTexture2DId];
+                }
+
+                let levelItem = textureItem.levels[level];
+                if(levelItem==undefined){
+                    textureItem.levels[level] = {
+                        width,
+                        height,
+                        internalFormat,
+                        pixels:[],
+                    };
+                    levelItem = textureItem.levels[level];
+                }
+
+                if(!data.isNull()){
+                    const pixData= base64Encode(data, dataLength);
+                    textureItem.levels[level].pixels=[{
+                        width,height,
+                        xoffset:0, yoffset:0,
+                        data:pixData,
+                        format,
+                    }]
+                }
+            }
+        }
+
+
+        if (0) {
+            if (!data.isNull()) {
+                const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+                console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
+                const dumpdata: glTexImage2D_DATA = {
                     target,
                     level,
                     internalFormat,
@@ -327,13 +446,14 @@ const hookGame = (info:{[key:string]:any}) => {
                     format,
                     type,
                     data: base64Encode(data, dataLength),
+                }
+
+                writeJsonInfo(fn, {
+                    function: "glTexImage2D",
+                    data: dumpdata,
+                }); fileNo++;
+
             }
-
-            writeJsonInfo(fn, {
-                function:"glTexImage2D",
-                data : dumpdata,
-            }); fileNo++;
-
         }
 
     },
@@ -371,27 +491,55 @@ const hookGame = (info:{[key:string]:any}) => {
             findName(type,      types_GLES2),
         )
 
-        if(!data.isNull()){
-            const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-            console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
-            fileNo++;
-            const dumpdata : glTexSubImage2D_DATA = {
-                target,
-                level,
-                xoffset,
-                yoffset,
-                width,
-                height,
-                format,
-                type,
-                data: base64Encode(data, dataLength),
+        if (1) {
+
+            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
+
+                let textureItem = allTextures[currentTexture2DId];
+                if (textureItem != undefined) {
+
+                    let levelItem = textureItem.levels[level];
+                    if (levelItem != undefined) {
+
+                        if (!data.isNull()) {
+                            const pixData = base64Encode(data, dataLength);
+                            textureItem.levels[level].pixels = [{
+                                width, height,
+                                xoffset, yoffset,
+                                data: pixData,
+                                format,
+                            }]
+                        }
+
+                    }
+                }
             }
+        }
 
-            writeJsonInfo(fn, {
-                function:"glTexSubImage2D",
-                data : dumpdata,
-            }); fileNo++;
+        if (0) {
 
+            if (!data.isNull()) {
+                const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
+                console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
+                fileNo++;
+                const dumpdata: glTexSubImage2D_DATA = {
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    type,
+                    data: base64Encode(data, dataLength),
+                }
+
+                writeJsonInfo(fn, {
+                    function: "glTexSubImage2D",
+                    data: dumpdata,
+                }); fileNo++;
+
+            }
         }
 
     },
@@ -510,14 +658,16 @@ const test = (info:{[key:string]:any})=>{
         })
     }
 
-
-
 }
 
+let info : {[key:string]:any} = {
+    
+}
 
 rpc.exports = {
     init:function(...paras:any){
-        const [stage, info]  = paras;
+        const [stage] = paras;
+        [info] = paras;
         console.log(`${stage} ${JSON.stringify(info)}`)
         console.log('##################################################')
         Java.perform(()=>{
@@ -525,3 +675,38 @@ rpc.exports = {
         })
     }
 }
+
+
+declare global {                                                                                                                            
+    var helloWorld: () => void;                                                                                                             
+    var d: () => void;                                                                                                             
+    var p: () => void;                                                                                                             
+}    
+
+globalThis.helloWorld = () => {                                                                                                             
+    console.log('Hello, World!');                                                                                                           
+};                                                                                                                                          
+      
+globalThis.d= ()  => {
+    console.log('texture2d count', Object.keys(allTextures).length)
+    const packageName   = info['app']       ?? 'com.Joymax.GreatMagician';
+    const soname        = info['soname']    ?? 'libGLES_mali.so';
+
+    const fn            = `/data/data/${packageName}/files/Texture2D.json`;
+
+    console.log('write file', fn)
+    if (libPatchGame) {
+        const ret = new NativeFunction(libPatchGame.symbols.writeTextFile, 'int', ['pointer', 'pointer'])(
+            Memory.allocUtf8String(fn), 
+            Memory.allocUtf8String(JSON.stringify(allTextures))
+        );
+        if (ret < 0) {
+            console.log(`write file ${fn} failed ${ret}`)
+        }
+    }
+
+}                                                                                                            
+
+globalThis.p= ()  => {
+    console.log('texture2d count', Object.keys(allTextures).length)
+}                                                                                                            

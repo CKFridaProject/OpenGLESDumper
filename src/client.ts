@@ -355,7 +355,7 @@ const init = async (appDiv : HTMLDivElement) => {
 
                 const fun = dumpData.function;
                 const data = dumpData.data;
-                listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height} ${findName(data.format, formats_GLES2)}`
+                listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height}`
                 listItem.tabIndex = index; // This makes the li focusable
                 listItem.addEventListener('click', () => {
                     selectedIdx = index;
