@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <GLES2/gl2.h>
+#include <GLES3/gl32.h>
 #include <ftw.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -122,6 +123,33 @@ int delete_and_remake_folder(const char *folder_path) {
     return 0;
 }
 
+
+extern "C" int __attribute__((visibility("default"))) testTexture (unsigned char* base, const char* outputDir) {
+    GLint width; 
+    GLint height; 
+    GLint internalFormat; 
+    GLint textureID;
+    // Get the currently bound texture ID
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &textureID);
+
+
+    // Get the width, height, and internal format of the currently bound texture
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
+
+    LOG_INFOS("width: %d, height: %d, internalFormat: %d, textureID: %d", width, height, internalFormat, textureID);
+
+
+    return 0;
+}
+
+extern "C" int __attribute__((visibility("default"))) testOpenGL (unsigned char* base, const char* outputDir) {
+    const GLubyte* versionGL = glGetString(GL_VERSION); 
+    LOG_INFOS("versionGL: %s", versionGL);
+    testTexture(base, outputDir);
+    return 0;
+}
 
 extern "C" int __attribute__((visibility("default"))) init (unsigned char* base, const char* outputDir) {
 

@@ -1,22 +1,24 @@
 
+export interface LEVEL_DATA {
+    pixels: {
+        xoffset      : number,
+        yoffset      : number,
+        width        : number,
+        height       : number,
+        data         : string,
+        format       : number,
+        type        ?: number,
+        compressed   : boolean,
+    }[],
+    width: number,
+    height: number,
+    border: number,
+    internalFormat: number,
+}
 
 export interface Texture_DATA {
     type    : 'Texture2D',
-    levels  : {[key:string]: {
-        pixels:{
-            xoffset: number,
-            yoffset: number,
-            width  : number,
-            height : number,
-            data   : string, 
-            format : number,
-            type  ?: number,
-        }[],
-        width  : number,
-        height : number,
-        border : number,
-        internalFormat: number,
-    }},
+    levels  : {[key:string]: LEVEL_DATA },
 }
 
 export type TEXTURES_TYPE =  {[key:string]:Texture_DATA};

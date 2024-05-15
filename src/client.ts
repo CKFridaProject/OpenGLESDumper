@@ -3,6 +3,7 @@ import io from 'socket.io-client';
 
 import { 
     DUMP_DATA, 
+    LEVEL_DATA, 
     TEXTURES_TYPE, 
     Texture_DATA, 
     findName,
@@ -22,6 +23,129 @@ const findValue = (name: string, names: { [key: string]: number }): number | und
     return names[name];
 }
 
+function isPowerOf2(value: number) {
+    // If value is power of two, the bitwise AND operation (&) of value and (value - 1) will be zero.                                    
+    // It works because powers of two in binary form always have just one bit set. The rest of the bits are zero.                        
+    // So, (value & (value - 1)) will be zero for power of two values.                                                                   
+    // For example, 4 in binary is 100, and 3 in binary is 011. And bitwise AND of 4 and 3 is 000.                                       
+    return (value & (value - 1)) == 0;
+}
+
+function drawTexture2DGL(gl: any, texture: any) {
+
+    let target = gl.TEXTURE_2D;
+    gl.bindTexture(target, texture);
+
+    // Clamp to edge and use linear filtering.                                                                                   
+    gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    // create a simple 2d drawing program
+    let vertexShader = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vertexShader, `
+            attribute vec2 a_position;
+            attribute vec2 a_texCoord;
+            varying vec2 v_texCoord;
+            void main() {
+                gl_Position = vec4(a_position, 0, 1);
+                v_texCoord = a_texCoord;
+            }
+        `);
+    gl.compileShader(vertexShader);
+    let fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fragmentShader, `
+            precision mediump float;
+            varying vec2 v_texCoord;
+            uniform sampler2D u_texture;
+            void main() {
+                gl_FragColor = texture2D(u_texture, v_texCoord);
+            }
+        `);
+    gl.compileShader(fragmentShader);
+    let program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    // look up where the vertex data needs to go.
+    let positionLocation = gl.getAttribLocation(program, "a_position");
+    let texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+    let textureLocation = gl.getUniformLocation(program, "u_texture");
+
+    // provide texture coordinates for the rectangle.
+    let texCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0.0, 0.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        0.0, 1.0,
+        1.0, 0.0,
+        1.0, 1.0,
+    ]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(texCoordLocation);
+    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+
+    // provide positions for the rectangle.
+    let positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1.0, -1.0,
+        1.0, -1.0,
+        -1.0, 1.0,
+        -1.0, 1.0,
+        1.0, -1.0,
+        1.0, 1.0,
+    ]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+    // draw the rectangle
+    gl.bindTexture(target, texture);
+    gl.uniform1i(textureLocation, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+
+function calcCompressedDataLength(width: number, height: number, format: number, ext_etc: any, ext_astc: any): number {
+    let blockSizeInBits: number;
+
+    switch (format) {
+        case ext_etc.COMPRESSED_RGB8_ETC2:
+            blockSizeInBits = 64; // ETC2 uses 4x4 blocks at 64 bits/block
+            break;
+        case ext_etc.COMPRESSED_RGBA8_ETC2_EAC:
+            blockSizeInBits = 128; // ETC2 uses 4x4 blocks at 128 bits/block for RGBA8
+            break;
+        case ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR:
+            blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
+            break;
+        case ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR:
+            blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
+            break;
+        default:
+            throw new Error('Unsupported format ' + format);
+    }
+
+    const blockSizeInBytes = blockSizeInBits / 8;
+    const numBlocksAcross = Math.ceil(width / 4); // both ETC2 and ASTC use 4x4 blocks
+    const numBlocksDown = Math.ceil(height / 4); // both ETC2 and ASTC use 4x4 blocks
+    const numBlocks = numBlocksAcross * numBlocksDown;
+
+    return numBlocks * blockSizeInBytes;
+}
+
+function getGlCompressImageFormat(format: number, ext_etc: any, ext_astc: any) {
+    const formatName = findName(format, formats_GLES2);
+    if (formatName === 'GL_COMPRESSED_RGB8_ETC2') return ext_etc.COMPRESSED_RGB8_ETC2;
+    if (formatName === 'GL_COMPRESSED_RGBA8_ETC2_EAC') return ext_etc.COMPRESSED_RGBA8_ETC2_EAC;
+    if (formatName === 'GL_COMPRESSED_RGBA_ASTC_4x4_KHR') return ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR;
+    if (formatName === 'GL_COMPRESSED_RGBA_ASTC_8x8_KHR') return ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR;
+    throw new Error(`Unknown format ${format}`);
+}
 
 // client.ts
 function base64ToUint8Array(base64String: string): Uint8Array {
@@ -161,7 +285,7 @@ const appImages = async (appDiv : HTMLDivElement) => {
         }
     });
 
-    const drawTexture = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
+    const drawImage = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
 
         const fun = dumpData.function;
         const width = dumpData.data.width;
@@ -170,42 +294,6 @@ const appImages = async (appDiv : HTMLDivElement) => {
         canvas.width = width;
         canvas.height = height;
 
-        function calcCompressedDataLength(width: number, height: number, format: number): number {
-            let blockSizeInBits: number;
-
-            switch (format) {
-                case ext_etc.COMPRESSED_RGB8_ETC2:
-                    blockSizeInBits = 64; // ETC2 uses 4x4 blocks at 64 bits/block
-                    break;
-                case ext_etc.COMPRESSED_RGBA8_ETC2_EAC:
-                    blockSizeInBits = 128; // ETC2 uses 4x4 blocks at 128 bits/block for RGBA8
-                    break;
-                case ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR:
-                    blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
-                    break;
-                case ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR:
-                    blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
-                    break;
-                default:
-                    throw new Error('Unsupported format ' + format);
-            }
-
-            const blockSizeInBytes = blockSizeInBits / 8;
-            const numBlocksAcross = Math.ceil(width / 4); // both ETC2 and ASTC use 4x4 blocks
-            const numBlocksDown = Math.ceil(height / 4); // both ETC2 and ASTC use 4x4 blocks
-            const numBlocks = numBlocksAcross * numBlocksDown;
-
-            return numBlocks * blockSizeInBytes;
-        }
-
-        function isPowerOf2(value:number) {
-            // If value is power of two, the bitwise AND operation (&) of value and (value - 1) will be zero.                                    
-            // It works because powers of two in binary form always have just one bit set. The rest of the bits are zero.                        
-            // So, (value & (value - 1)) will be zero for power of two values.                                                                   
-            // For example, 4 in binary is 100, and 3 in binary is 011. And bitwise AND of 4 and 3 is 000.                                       
-            return (value & (value - 1)) == 0;
-        }
-
 
         gl.viewport(0, 0, width, height);
         let target = gl.TEXTURE_2D;
@@ -213,14 +301,6 @@ const appImages = async (appDiv : HTMLDivElement) => {
         let texture = gl.createTexture();
 
 
-        function getGlCompressImageFormat(format: number) {
-            const formatName = findName(format, formats_GLES2);
-            if(formatName === 'GL_COMPRESSED_RGB8_ETC2'           ) return ext_etc .COMPRESSED_RGB8_ETC2;
-            if(formatName === 'GL_COMPRESSED_RGBA8_ETC2_EAC'      ) return ext_etc .COMPRESSED_RGBA8_ETC2_EAC;
-            if(formatName === 'GL_COMPRESSED_RGBA_ASTC_4x4_KHR'   ) return ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR;
-            if(formatName === 'GL_COMPRESSED_RGBA_ASTC_8x8_KHR'   ) return ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR;
-            throw new Error(`Unknown format ${format}`);
-        }
 
         switch(fun){
             case 'glTexImage2D': {
@@ -276,7 +356,7 @@ const appImages = async (appDiv : HTMLDivElement) => {
                 // target = data.target;
                 gl.bindTexture(target, texture);
                 const pixelData = base64ToUint8Array(data.data)
-                const glFormat = getGlCompressImageFormat(data.format);
+                const glFormat = getGlCompressImageFormat(data.format, ext_etc, ext_astc);
                 console.log('target', data.target,  findName(data.target, targets_GLES2), gl.TEXTURE_2D,)
                 console.log('level', data.level, )
                 console.log('xoffset', data.xoffset, )
@@ -285,8 +365,7 @@ const appImages = async (appDiv : HTMLDivElement) => {
                 console.log('height', data.height,) 
                 console.log('format', data.format, findName(data.format, formats_GLES2), glFormat)
                 console.log('pixelData', pixelData.length);
-                const pixelDataLength = calcCompressedDataLength(data.width, data.height, glFormat);
-                //if(isPowerOf2(width) && isPowerOf2(height)) gl.generateMipmap(gl.TEXTURE_2D);
+                const pixelDataLength = calcCompressedDataLength(data.width, data.height, glFormat, ext_etc, ext_astc);
                 gl.compressedTexImage2D(
                     target, 
                     0,
@@ -303,78 +382,8 @@ const appImages = async (appDiv : HTMLDivElement) => {
                 console.log('unknown function: ' + fun);
         }
 
+        drawTexture2DGL(gl, texture);
 
-        // Clamp to edge and use linear filtering.                                                                                   
-        gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-        // create a simple 2d drawing program
-        let vertexShader = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vertexShader, `
-            attribute vec2 a_position;
-            attribute vec2 a_texCoord;
-            varying vec2 v_texCoord;
-            void main() {
-                gl_Position = vec4(a_position, 0, 1);
-                v_texCoord = a_texCoord;
-            }
-        `);
-        gl.compileShader(vertexShader);
-        let fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fragmentShader, `
-            precision mediump float;
-            varying vec2 v_texCoord;
-            uniform sampler2D u_texture;
-            void main() {
-                gl_FragColor = texture2D(u_texture, v_texCoord);
-            }
-        `);
-        gl.compileShader(fragmentShader);
-        let program = gl.createProgram();
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
-        gl.useProgram(program);
-
-        // look up where the vertex data needs to go.
-        let positionLocation = gl.getAttribLocation(program, "a_position");
-        let texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
-        let textureLocation = gl.getUniformLocation(program, "u_texture");
-
-        // provide texture coordinates for the rectangle.
-        let texCoordBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            0.0, 0.0,
-            1.0, 0.0,
-            0.0, 1.0,
-            0.0, 1.0,
-            1.0, 0.0,
-            1.0, 1.0,
-        ]), gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(texCoordLocation);
-        gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-
-        // provide positions for the rectangle.
-        let positionBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            -1.0, -1.0,
-            1.0, -1.0,
-            -1.0,  1.0,
-            -1.0,  1.0,
-            1.0, -1.0,
-            1.0,  1.0,
-        ]), gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-        // draw the rectangle
-        gl.bindTexture(target, texture);
-        gl.uniform1i(textureLocation, 0);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
 
 
     }
@@ -385,7 +394,7 @@ const appImages = async (appDiv : HTMLDivElement) => {
         detailDiv.textContent = name;
         console.log('updateDetail', name, item);
 
-        drawTexture(canvas, item);
+        drawImage(canvas, item);
     }
 
 
@@ -410,23 +419,16 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
         // Create a function to generate the list elements
         function createTree(key:string, textureData: Texture_DATA) {
             const textureNode = document.createElement('li');
-            textureNode.textContent = `${key} Type: ${ textureData.type }`;
+            const levels = Object.keys(textureData.levels).length;
+            textureNode.textContent = `${key} Type: ${ textureData.type }  Levels: ${levels }`;
 
-            const levelNode = document.createElement('ul');
-            Object.keys(textureData.levels).forEach((levelKey) => {
-                const levelListItem = document.createElement('li');
+            if(levels> 0){
+                textureNode.addEventListener('click', () => {
+                    drawTexture(canvas, textureData);
+                })
 
-                const levelData = textureData.levels[levelKey];
+            }
 
-                levelListItem.textContent = `Level: ${ levelKey }, Width: ${ levelData.width }, Height: ${ levelData.height }, Border: ${ levelData.border }, Internal Format: ${findName(levelData.internalFormat, formats_GLES2)}, data: ${levelData.pixels.length}`;
-
-                levelListItem.addEventListener('click', () =>console.log(`${key} - Level: ${levelKey}`, ));
-
-
-                levelNode.appendChild(levelListItem);
-            });
-
-            textureNode.appendChild(levelNode);
             return textureNode;
         }
 
@@ -459,6 +461,86 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
             alert('WEBGL_compressed_texture_astc is not available');
         }
 
+        const drawTexture = (canvas: HTMLCanvasElement, textureData: Texture_DATA) => {
+
+            const level0 = textureData.levels[0];
+
+            const width  = level0.width;
+            const height = level0.height;
+
+            canvas.width = width;
+            canvas.height = height;
+
+
+            gl.viewport(0, 0, width, height);
+
+            let texture = gl.createTexture();
+
+            {
+
+                let target = gl.TEXTURE_2D;
+                gl.bindTexture(target, texture);
+
+                {
+
+                    const pixels = level0.pixels;
+                    let imageWidth = Math.max(...pixels.map(data => data.xoffset + data.width));
+                    let imageHeight= Math.max(...pixels.map(data => data.yoffset + data.height));
+                    let compressed = pixels.some(data => data.compressed);
+                    if(!compressed){
+                    gl.texImage2D(
+                        target,
+                        0,
+                        level0.internalFormat,
+                        imageWidth,
+                        imageHeight,
+                        0,
+                        level0.pixels[0].format,
+                        level0.pixels[0].type,
+                        null);
+                    }
+
+                    // pass data
+                    pixels.forEach((data) => {
+
+                        console.log('data', data)
+                        console.log('data fromat', findName(data.format, formats_GLES2))
+                        const pixelData = base64ToUint8Array(data.data)
+                        if(data.compressed){
+                                gl.compressedTexSubImage2D(
+                                    target, 
+                                    0,
+                                    data.xoffset,
+                                    data.yoffset,
+                                    data.width, 
+                                    data.height, 
+                                    data.format,
+                                    pixelData
+                                );
+
+                        }
+                        else{
+                                gl.texSubImage2D(
+                                    target, 
+                                    0,
+                                    data.xoffset,
+                                    data.yoffset,
+                                    data.width, 
+                                    data.height, 
+                                    data.format,
+                                    data.type || gl.UNSIGNED_BYTE, 
+                                    pixelData);
+                        }
+                        
+                    })
+                }
+            }
+
+            // const pixelData = base64ToUint8Array(data.data)
+            // target = data.target;
+            drawTexture2DGL(gl, texture);
+
+        }
 
 
 
