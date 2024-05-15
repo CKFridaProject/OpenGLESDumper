@@ -165,7 +165,7 @@ const writeJsonInfo = (fn:string, jsoninfo:DUMP_DATA) => {
 
 
 const patchGame = (info:{[key:string]:any}) => {
-    const hooksForGL : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
+    const patchesForGL : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
 
 {p:Module.getExportByName('libEGL.so',"eglCreateContext"     ) , name :"eglCreateContext"    , opts:{
 
@@ -182,7 +182,7 @@ const patchGame = (info:{[key:string]:any}) => {
 
     ];
     [
-        ... hooksForGL,
+        ... patchesForGL,
     ].forEach(t=>{
         console.log(`patch ${JSON.stringify(t)}`)
         let {p, name, opts} = t;
@@ -636,11 +636,31 @@ const hookGame = (info:{[key:string]:any}) => {
 
     ];
 
+    const hooksForEGL : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
 
+{p:Module.getExportByName('libEGL.so',"eglSwapBuffers"     ) , name :"eglSwapBuffers"    , opts:{
+    hide:true,
+    enterFun(args, tstr, thiz) {
+        if(libPatchGame){
+            const m = Process.getModuleByName(soname);
+            new NativeFunction(libPatchGame.symbols.hookOpenGL,'int',['pointer','pointer'])(
+                m.base,
+                Memory.allocUtf8String(dumpDir),
+            );
+        }
+    },
+},},
+
+    ];
 
     [
-        ... hooksForTexture2D,
-    ].forEach(t=>{
+        ... hooksForEGL,
+       //... hooksForTexture2D,
+    ].forEach((t:{
+        p: NativePointer;
+        name?: string ;
+        opts: HookFunActionOptArgs;
+    })=>{
         console.log(`hook ${JSON.stringify(t)}`)
         let {p, name, opts} = t;
         name = name ?? p.toString();

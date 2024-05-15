@@ -181,3 +181,108 @@ extern "C" int __attribute__((visibility("default"))) init (unsigned char* base,
     return 0;
 }
 
+
+void SaveTextureToFile(GLuint textureId, int width, int height, const char* filename) {
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    // Allocate memory for pixel data
+    GLubyte* pixels = new GLubyte[width * height * 4];
+
+    // Set up framebuffer and renderbuffer
+    GLuint framebuffer, renderbuffer;
+    glGenFramebuffers(1, &framebuffer);
+    glGenRenderbuffers(1, &renderbuffer);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
+
+    // Attach the texture to the FBO
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
+
+    // Check FBO status
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        LOG_INFOS("Failed to setup Framebuffer status: %d", status);
+        return;
+    }
+
+    // Read the pixel data
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    // Open a binary file in write mode
+    FILE* outFile = fopen(filename, "wb");
+    if(outFile == NULL) {
+        LOG_INFOS("Failed to open file: %s", filename);
+        delete [] pixels;
+        return ;
+    }
+
+    // Write width, height, and format
+    fwrite(&width, sizeof(width), 1, outFile);
+    fwrite(&height, sizeof(height), 1, outFile);
+    GLenum format = GL_RGBA;
+    fwrite(&format, sizeof(format), 1, outFile);
+
+    // Write the pixel data
+    fwrite(pixels, 1, width * height * 4, outFile);
+
+    // Clean up
+    delete[] pixels;
+    glDeleteFramebuffers(1, &framebuffer);
+    glDeleteRenderbuffers(1, &renderbuffer);
+
+    // Close the file
+    fclose(outFile);
+
+    LOG_INFOS("write texture to file: %s", filename);
+}
+
+
+
+extern "C" int __attribute__((visibility("default"))) hookOpenGL (unsigned char* base, const char* outputDir) {
+    static int count = 0;
+    if(count == 0) {
+        
+        const GLubyte* versionGL = glGetString(GL_VERSION); 
+        LOG_INFOS("versionGL: %s", versionGL);
+
+        {
+            int originalTextureID = 0;
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &originalTextureID);
+            // list all texture2d
+            for ( int t=0;t< 3000;t++){
+                if(glIsTexture(t)){
+                    glBindTexture(GL_TEXTURE_2D, t);
+
+                    int level = 0;
+                    int width=0, height=0, internalFormat=0, isCompressed=0;
+
+                    // Get the width, height, and internal format of the currently bound texture
+                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &width);
+                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &height);
+                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
+                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_COMPRESSED, &isCompressed);
+                    LOG_INFOS("glIsTexture: %d width: %d, height: %d, internalFormat: 0x%x, isCompressed: %d", 
+                        t, width, height, internalFormat, isCompressed);
+
+                    {
+                        
+
+                        static char filename[1024];
+                        sprintf(filename,"%s/%08d.bin", outputDir, t);
+                        SaveTextureToFile(t,  width,  height, filename) ;
+
+                    }
+                }
+            }
+
+            glBindTexture(GL_TEXTURE_2D, originalTextureID);
+
+        }
+    }
+    count++;
+    return 0;
+}
+
