@@ -49,10 +49,14 @@ app.use(webpackHotMiddleware(compiler));
 
 let images: Array<{ fn: string; data: DUMP_DATA; }> = [];
 
-const pullDumps = (packageName:string, dumpDir:string) => {
-    const cmd = `rm -fr ${dumpDir} && mkdir ${dumpDir} && adb pull /data/data/${packageName}/files/dumps .`;
+const execCmd = (cmd:string) => {
     console.log(`command: ${cmd}`);
     child_process.execSync(cmd, { stdio: 'inherit' });
+}
+
+const pullDumps = (packageName:string, dumpDir:string) => {
+    execCmd( `rm -fr ${dumpDir} && mkdir ${dumpDir} && adb pull /data/data/${packageName}/files/dumps .`);
+    execCmd( `adb pull /data/data/${packageName}/files/Texture2D.json .`);
 }
 
 const updataImages = (dumpDir:string) => {

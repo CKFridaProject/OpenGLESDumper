@@ -182,6 +182,89 @@ const hookGame = (info:{[key:string]:any}) => {
     const system = new NativeFunction(Module.getExportByName(null, 'system'),'int',['pointer']);
     system(Memory.allocUtf8String(`rm -fr ${dumpDir} && mkdir -p ${dumpDir}`));
 
+    const addNewTexture = (target:number, level:number, internalFormat:number, width:number, height:number, border:number, data?:string, format?:number, type?:number) => {
+        
+        if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
+
+            let textureItem = allTextures[currentTexture2DId];
+            if (textureItem == undefined) {
+                allTextures[currentTexture2DId] = {
+                    type: "Texture2D",
+                    levels: {},
+                }
+                textureItem = allTextures[currentTexture2DId];
+            }
+
+            let levelItem = textureItem.levels[level];
+            if (levelItem == undefined) {
+                textureItem.levels[level] = {
+                    width,
+                    height,
+                    internalFormat,
+                    border,
+                    pixels: [],
+                };
+                levelItem = textureItem.levels[level];
+            }
+
+            if (data && format && type) {
+                textureItem.levels[level].pixels = [{
+                    width, height,
+                    xoffset: 0, yoffset: 0,
+                    format, type,
+                    data,
+                }]
+            }
+        }
+    };
+
+    const addSubData = (
+        target:number, 
+        level:number, 
+        xoffset:number, 
+        yoffset:number, 
+        width:number, 
+        height:number, 
+        data?:string, 
+        format?:number, 
+        type?:number
+    ) => {
+
+        if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
+
+            if (data && format) {
+
+                let textureItem = allTextures[currentTexture2DId];
+                if (textureItem == undefined) {
+                    textureItem = allTextures[currentTexture2DId] = {
+                        type: "Texture2D",
+                        levels: {},
+                    }
+                }
+
+                let levelItem = textureItem.levels[level];
+                if (levelItem == undefined) {
+                    levelItem = textureItem.levels[level] = {
+                        width: xoffset + width,
+                        height: yoffset + height,
+                        internalFormat: 0,
+                        border: 0,
+                        pixels: [],
+                    }
+                }
+
+                textureItem.levels[level].pixels.push({
+                    width, height,
+                    xoffset, yoffset,
+                    data,
+                    format,
+                    type,
+                })
+
+            }
+        }
+    }
+
     const hooksForTexture2D : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
 
 {p:Module.getExportByName(soname,"glBindTexture"     ) , name :"glBindTexture"    , opts:{
@@ -220,47 +303,14 @@ const hookGame = (info:{[key:string]:any}) => {
         const dataLength         = thiz.args6.toUInt32();
         const data               = thiz.args7;
 
-        if (1) {
+        const pixData            = !data.isNull() ? base64Encode(data, dataLength) : undefined;
+        console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border}, ${data})  pixData: ${pixData ? pixData.length : undefined} currentTexture2DId: ${currentTexture2DId} `);
 
-            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId!=0) {
-
-                let textureItem = allTextures[currentTexture2DId];
-                if(textureItem==undefined){
-                    allTextures[currentTexture2DId] = {
-                        type : "Texture2D",
-                        levels : {},
-                    }
-                    textureItem = allTextures[currentTexture2DId];
-                }
-
-                let levelItem = textureItem.levels[level];
-                if(levelItem==undefined){
-                    textureItem.levels[level] = {
-                        width,
-                        height,
-                        internalFormat,
-                        pixels:[],
-                    };
-                    levelItem = textureItem.levels[level];
-                }
-
-                if(!data.isNull()){
-                    const pixData= base64Encode(data, dataLength);
-                    textureItem.levels[level].pixels=[{
-                        width,height,
-                        xoffset:0, yoffset:0,
-                        data:pixData,
-                    }]
-                }
-
-            }
-        }
+        addNewTexture(target, level, internalFormat, width, height, border, pixData, );
 
         if (1) {
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-            console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border}, ${data}) dataLength ${dataLength} => ${fn}`);
-            if (!data.isNull()) {
-                fileNo++;
+            if (pixData) {
                 const dumpdata: glCompreesdTexImage2D_DATA = {
                     target,
                     level,
@@ -268,14 +318,14 @@ const hookGame = (info:{[key:string]:any}) => {
                     width,
                     height,
                     border,
-                    data: base64Encode(data, dataLength),
+                    data: pixData,
                 }
 
                 writeJsonInfo(fn, {
                     function: "glCompressedTexImage2D",
                     data: dumpdata,
-                }); fileNo++;
-
+                }); 
+                fileNo++;
             }
         }
         
@@ -283,7 +333,6 @@ const hookGame = (info:{[key:string]:any}) => {
 
 }, }, 
 
-{p:Module.getExportByName(soname,"glCompressedTexImage3D"     ) , name :"glCompressedTexImage3D"    , opts:{}, }, 
 
 {p:Module.getExportByName(soname,"glCompressedTexSubImage2D"  ) , name :"glCompressedTexSubImage2D" , opts:{
     nparas:9,
@@ -308,38 +357,16 @@ const hookGame = (info:{[key:string]:any}) => {
         const dataLength         = thiz.args7.toUInt32();
         const data               = thiz.args8;
 
-        if (1) {
+        const pixData            = (!data.isNull() && dataLength>0) ? base64Encode(data, dataLength) : undefined;
+        console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) pixData ${pixData? pixData.length : undefined} currentTexture2DId: ${currentTexture2DId}`);
 
-            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
-
-                let textureItem = allTextures[currentTexture2DId];
-                if (textureItem != undefined) {
-
-                    let levelItem = textureItem.levels[level];
-                    if (levelItem != undefined) {
-
-                        if (!data.isNull()) {
-                            const pixData = base64Encode(data, dataLength);
-                            textureItem.levels[level].pixels = [{
-                                width, height,
-                                xoffset, yoffset,
-                                data: pixData,
-                                format,
-                            }]
-                        }
-
-                    }
-                }
-            }
-        }
+        addSubData(target, level, xoffset, yoffset, width, height, pixData, format, );
 
 
         if (1) {
 
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-            console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) dataLength ${dataLength} => ${fn}`);
-            if (!data.isNull()) {
-                fileNo++;
+            if (pixData) {
                 const dumpdata: glCompreesdTexSubImage2D_DATA = {
                     target,
                     level,
@@ -348,13 +375,14 @@ const hookGame = (info:{[key:string]:any}) => {
                     width,
                     height,
                     format,
-                    data: base64Encode(data, dataLength),
+                    data: pixData,
 
                 };
                 writeJsonInfo(fn, {
                     function: "glCompressedTexSubImage2D",
                     data: dumpdata,
-                }); fileNo++;
+                }); 
+                fileNo++;
 
             }
         }
@@ -362,7 +390,6 @@ const hookGame = (info:{[key:string]:any}) => {
     },
 }, }, 
 
-{p:Module.getExportByName(soname,"glCompressedTexSubImage3D"  ) , name :"glCompressedTexSubImage3D" , opts:{}, }, 
 
 {p:Module.getExportByName(soname,"glTexImage2D"     ) , name :"glTexImage2D"    , opts:{
     nparas:9,
@@ -392,50 +419,14 @@ const hookGame = (info:{[key:string]:any}) => {
             findName(format, formats_GLES2),
             findName(type, types_GLES2),
         )
+        const pixData = data.isNull() ? undefined : base64Encode(data, dataLength);
+
+        addNewTexture(target, level, internalFormat, width, height, border, pixData, format, type);
+        console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) pixData : ${pixData? pixData.length : undefined}  currentTexture2DId: ${currentTexture2DId}`);
 
         if (1) {
-
-            console.log(tstr, `glTexImage2D( ${target}  ${targets_GLES2['GL_TEXTURE_2D']}, ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength}, ${currentTexture2DId}`);
-
-            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId!=0) {
-
-                let textureItem = allTextures[currentTexture2DId];
-                if(textureItem==undefined){
-                    allTextures[currentTexture2DId] = {
-                        type : "Texture2D",
-                        levels : {},
-                    }
-                    textureItem = allTextures[currentTexture2DId];
-                }
-
-                let levelItem = textureItem.levels[level];
-                if(levelItem==undefined){
-                    textureItem.levels[level] = {
-                        width,
-                        height,
-                        internalFormat,
-                        pixels:[],
-                    };
-                    levelItem = textureItem.levels[level];
-                }
-
-                if(!data.isNull()){
-                    const pixData= base64Encode(data, dataLength);
-                    textureItem.levels[level].pixels=[{
-                        width,height,
-                        xoffset:0, yoffset:0,
-                        data:pixData,
-                        format,
-                    }]
-                }
-            }
-        }
-
-
-        if (0) {
-            if (!data.isNull()) {
+            if (pixData) {
                 const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-                console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
                 const dumpdata: glTexImage2D_DATA = {
                     target,
                     level,
@@ -445,13 +436,14 @@ const hookGame = (info:{[key:string]:any}) => {
                     border,
                     format,
                     type,
-                    data: base64Encode(data, dataLength),
+                    data: pixData,
                 }
 
                 writeJsonInfo(fn, {
                     function: "glTexImage2D",
                     data: dumpdata,
-                }); fileNo++;
+                }); 
+                fileNo++;
 
             }
         }
@@ -459,7 +451,6 @@ const hookGame = (info:{[key:string]:any}) => {
     },
 }, }, 
 
-{p:Module.getExportByName(soname,"glTexImage3D"     ) , name :"glTexImage3D"    , opts:{}, }, 
 
 {p:Module.getExportByName(soname,"glTexSubImage2D"  ) , name :"glTexSubImage2D" , opts:{
     //void glTexSubImage2D(	GLenum target,
@@ -491,37 +482,16 @@ const hookGame = (info:{[key:string]:any}) => {
             findName(type,      types_GLES2),
         )
 
+        const pixData = data.isNull() ? undefined : base64Encode(data, dataLength);
+
+        addSubData(target, level, xoffset, yoffset, width, height, pixData, format, type);
+
+        console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) pixData : ${pixData? pixData.length : undefined}  currentTexture2DId: ${currentTexture2DId}`);
+
         if (1) {
 
-            if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
-
-                let textureItem = allTextures[currentTexture2DId];
-                if (textureItem != undefined) {
-
-                    let levelItem = textureItem.levels[level];
-                    if (levelItem != undefined) {
-
-                        if (!data.isNull()) {
-                            const pixData = base64Encode(data, dataLength);
-                            textureItem.levels[level].pixels = [{
-                                width, height,
-                                xoffset, yoffset,
-                                data: pixData,
-                                format,
-                            }]
-                        }
-
-                    }
-                }
-            }
-        }
-
-        if (0) {
-
-            if (!data.isNull()) {
+            if (pixData) {
                 const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
-                console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) dataLength ${dataLength} => ${fn}`);
-                fileNo++;
                 const dumpdata: glTexSubImage2D_DATA = {
                     target,
                     level,
@@ -531,13 +501,14 @@ const hookGame = (info:{[key:string]:any}) => {
                     height,
                     format,
                     type,
-                    data: base64Encode(data, dataLength),
+                    data: pixData,
                 }
 
                 writeJsonInfo(fn, {
                     function: "glTexSubImage2D",
                     data: dumpdata,
-                }); fileNo++;
+                }); 
+                fileNo++;
 
             }
         }
@@ -547,6 +518,9 @@ const hookGame = (info:{[key:string]:any}) => {
 }, }, 
 
 {p:Module.getExportByName(soname,"glTexSubImage3D"  ) , name :"glTexSubImage3D" , opts:{}, }, 
+{p:Module.getExportByName(soname,"glTexImage3D"     ) , name :"glTexImage3D"    , opts:{}, }, 
+{p:Module.getExportByName(soname,"glCompressedTexSubImage3D"  ) , name :"glCompressedTexSubImage3D" , opts:{}, }, 
+{p:Module.getExportByName(soname,"glCompressedTexImage3D"     ) , name :"glCompressedTexImage3D"    , opts:{}, }, 
 
     ];
 

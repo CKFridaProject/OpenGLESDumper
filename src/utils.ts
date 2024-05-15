@@ -9,11 +9,12 @@ export interface Texture_DATA {
             width  : number,
             height : number,
             data   : string, 
-            format?: number,
+            format : number,
             type  ?: number,
         }[],
         width  : number,
         height : number,
+        border : number,
         internalFormat: number,
     }},
 }
