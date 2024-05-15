@@ -10,6 +10,7 @@ import webpackHotMiddleware from 'webpack-hot-middleware';
 import config from '../webpack.config';
 import {
     DUMP_DATA,
+    TEXTURES_TYPE,
 }  from './utils';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
@@ -101,10 +102,19 @@ app.post('/upload', upload.single('image'), (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    const dumpDir = `${process.cwd()}/dumps`;
-    updataImages(dumpDir);
-    socket.emit('images', images);
+    socket.on('get_images', () => {
+        const dumpDir = `${process.cwd()}/dumps`;
+        updataImages(dumpDir);
+        socket.emit('images', images);
+    });
+
+    socket.on('texture2D', () => {
+        const fn = `${process.cwd()}/Texture2D.json`;
+        const data = JSON.parse(fs.readFileSync(fn, 'utf-8')) as TEXTURES_TYPE;
+        socket.emit('textures', data);
+    });
 });
+
 
 app.use(express.static(path.resolve(__dirname, 'dist')));
 

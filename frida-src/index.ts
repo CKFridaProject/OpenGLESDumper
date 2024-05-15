@@ -27,6 +27,7 @@ import {
     types_GLES2,
     glCompreesdTexSubImage2D_DATA,
     glCompreesdTexImage2D_DATA,
+    TEXTURES_TYPE,
 } from "../src/utils"
 
 import {
@@ -166,7 +167,7 @@ const writeJsonInfo = (fn:string, jsoninfo:DUMP_DATA) => {
 const patchGame = (info:{[key:string]:any}) => {
 }
 
-let allTextures : {[key:number]:Texture_DATA} = {};
+let allTextures : TEXTURES_TYPE = {};
 const hookGame = (info:{[key:string]:any}) => {
 
     const packageName   = info['app']       ?? 'com.Joymax.GreatMagician';
@@ -186,29 +187,30 @@ const hookGame = (info:{[key:string]:any}) => {
         
         if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
 
-            let textureItem = allTextures[currentTexture2DId];
+            const texturesKey = `${currentTexture2DId}`;
+
+            let textureItem = allTextures[texturesKey];
             if (textureItem == undefined) {
-                allTextures[currentTexture2DId] = {
+                textureItem = allTextures[texturesKey] = {
                     type: "Texture2D",
                     levels: {},
                 }
-                textureItem = allTextures[currentTexture2DId];
             }
 
-            let levelItem = textureItem.levels[level];
+            const levelsKey = `${level}`;
+            let levelItem = textureItem.levels[levelsKey];
             if (levelItem == undefined) {
-                textureItem.levels[level] = {
+                levelItem = textureItem.levels[levelsKey] = {
                     width,
                     height,
                     internalFormat,
                     border,
                     pixels: [],
                 };
-                levelItem = textureItem.levels[level];
             }
 
             if (data && format && type) {
-                textureItem.levels[level].pixels = [{
+                textureItem.levels[levelsKey].pixels = [{
                     width, height,
                     xoffset: 0, yoffset: 0,
                     format, type,
@@ -234,17 +236,20 @@ const hookGame = (info:{[key:string]:any}) => {
 
             if (data && format) {
 
-                let textureItem = allTextures[currentTexture2DId];
+                const texturesKey = `${currentTexture2DId}`;
+
+                let textureItem = allTextures[texturesKey];
                 if (textureItem == undefined) {
-                    textureItem = allTextures[currentTexture2DId] = {
+                    textureItem = allTextures[texturesKey] = {
                         type: "Texture2D",
                         levels: {},
                     }
                 }
 
-                let levelItem = textureItem.levels[level];
+                const levelsKey = `${level}`
+                let levelItem = textureItem.levels[levelsKey];
                 if (levelItem == undefined) {
-                    levelItem = textureItem.levels[level] = {
+                    levelItem = textureItem.levels[levelsKey] = {
                         width: xoffset + width,
                         height: yoffset + height,
                         internalFormat: 0,
@@ -253,7 +258,7 @@ const hookGame = (info:{[key:string]:any}) => {
                     }
                 }
 
-                textureItem.levels[level].pixels.push({
+                textureItem.levels[levelsKey].pixels.push({
                     width, height,
                     xoffset, yoffset,
                     data,

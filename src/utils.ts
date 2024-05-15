@@ -2,7 +2,7 @@
 
 export interface Texture_DATA {
     type    : 'Texture2D',
-    levels  : {[key:number]: {
+    levels  : {[key:string]: {
         pixels:{
             xoffset: number,
             yoffset: number,
@@ -18,6 +18,8 @@ export interface Texture_DATA {
         internalFormat: number,
     }},
 }
+
+export type TEXTURES_TYPE =  {[key:string]:Texture_DATA};
 
 export interface  glTexImage2D_DATA {
     target         : number;
