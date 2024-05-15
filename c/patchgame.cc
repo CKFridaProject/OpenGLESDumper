@@ -124,30 +124,48 @@ int delete_and_remake_folder(const char *folder_path) {
 }
 
 
-extern "C" int __attribute__((visibility("default"))) testTexture (unsigned char* base, const char* outputDir) {
-    GLint width; 
-    GLint height; 
-    GLint internalFormat; 
-    GLint textureID;
+struct TextureInfo {
+    int width;
+    int height;
+    int internalFormat;   
+    int isCompressed;
+};
+
+extern "C" int __attribute__((visibility("default"))) getCurrentTexture2DInfo (TextureInfo* info, int level) {
+    if(info == NULL) {
+        return -1;
+    }
+    int width, height, internalFormat, isCompressed;
+
+    // Get the width, height, and internal format of the currently bound texture
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &width);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &height);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_COMPRESSED, &isCompressed);
+
+
+    LOG_INFOS("width: %d, height: %d, internalFormat: %d, isCompressed: %d", width, height, internalFormat, isCompressed);
+
+    info->width = width;
+    info->height = height;
+    info->internalFormat = internalFormat;
+    info->isCompressed = isCompressed;
+    return 0;
+}
+
+extern "C" int __attribute__((visibility("default"))) getCurrentTexture2DId () {
+    int textureID=0;
     // Get the currently bound texture ID
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &textureID);
 
+    LOG_INFOS("textureID: %d", textureID);
 
-    // Get the width, height, and internal format of the currently bound texture
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
-
-    LOG_INFOS("width: %d, height: %d, internalFormat: %d, textureID: %d", width, height, internalFormat, textureID);
-
-
-    return 0;
+    return textureID;
 }
 
 extern "C" int __attribute__((visibility("default"))) testOpenGL (unsigned char* base, const char* outputDir) {
     const GLubyte* versionGL = glGetString(GL_VERSION); 
     LOG_INFOS("versionGL: %s", versionGL);
-    testTexture(base, outputDir);
     return 0;
 }
 

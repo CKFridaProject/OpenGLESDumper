@@ -201,7 +201,6 @@ const hookGame = (info:{[key:string]:any}) => {
 
     const dumpDir = `/data/data/${packageName}/files/dumps`;
     let fileNo = 0;
-    let currentTexture2DId = 0;
 
     console.log(`dump directory: ${dumpDir}`);
 
@@ -211,6 +210,7 @@ const hookGame = (info:{[key:string]:any}) => {
 
     const addNewTexture = (
         target:number, 
+        id: number,
         level:number, 
         internalFormat:number, 
         width:number, 
@@ -220,10 +220,10 @@ const hookGame = (info:{[key:string]:any}) => {
         data?:string, 
         format?:number, 
         type?:number) => {
-        
-        if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
 
-            const texturesKey = `${currentTexture2DId}`;
+        if (target == targets_GLES2['GL_TEXTURE_2D']) {
+
+            const texturesKey = `${id}`;
 
             let textureItem = allTextures[texturesKey];
             if (textureItem == undefined) {
@@ -233,25 +233,40 @@ const hookGame = (info:{[key:string]:any}) => {
                 }
             }
 
+            const currentTexture2DLevelInfo = Memory.alloc(0x20)
+            if (libPatchGame) {
+                const ret = new NativeFunction(libPatchGame.symbols.getCurrentTexture2DInfo, 'int', ['pointer', 'int'])(currentTexture2DLevelInfo, level);
+                if (ret < 0) {
+                    console.log(`getCurrentTexture2DInfo with ${level} failed ${ret}`)
+                    return;
+                }
+            }
+            const currentTexture2DLevelWidth             = currentTexture2DLevelInfo.add(4 * 0).readS32();
+            const currentTexture2DLevelHeight            = currentTexture2DLevelInfo.add(4 * 1).readS32();
+            const currentTexture2DLevelInternalFormat    = currentTexture2DLevelInfo.add(4 * 2).readS32();
+            const currentTexture2DLevelIsCompressed      = currentTexture2DLevelInfo.add(4 * 3).readS32();
+
             const levelsKey = `${level}`;
             let levelItem = textureItem.levels[levelsKey];
             if (levelItem == undefined) {
                 levelItem = textureItem.levels[levelsKey] = {
-                    width,
-                    height,
-                    internalFormat,
-                    border,
+                    width           : currentTexture2DLevelWidth,
+                    height          : currentTexture2DLevelHeight,
+                    internalFormat  : currentTexture2DLevelInternalFormat,
+                    compressed      : !!currentTexture2DLevelIsCompressed,
                     pixels: [],
                 };
             }
 
-            if (data && format && type) {
+            if (data && format ) {
                 textureItem.levels[levelsKey].pixels = [{
-                    width, height,
-                    xoffset: 0, yoffset: 0,
-                    format, type,
+                    width, 
+                    height,
+                    xoffset: 0, 
+                    yoffset: 0,
+                    format, 
+                    type,
                     data,
-                    compressed,
                 }]
             }
         }
@@ -259,6 +274,7 @@ const hookGame = (info:{[key:string]:any}) => {
 
     const addSubData = (
         target:number, 
+        id : number,
         level:number, 
         xoffset:number, 
         yoffset:number, 
@@ -270,11 +286,11 @@ const hookGame = (info:{[key:string]:any}) => {
         type?:number
     ) => {
 
-        if (target == targets_GLES2['GL_TEXTURE_2D'] && currentTexture2DId != 0) {
+        if (target == targets_GLES2['GL_TEXTURE_2D'] && id != 0) {
 
             if (data && format) {
 
-                const texturesKey = `${currentTexture2DId}`;
+                const texturesKey = `${id}`;
 
                 let textureItem = allTextures[texturesKey];
                 if (textureItem == undefined) {
@@ -284,25 +300,39 @@ const hookGame = (info:{[key:string]:any}) => {
                     }
                 }
 
+                const currentTexture2DLevelInfo = Memory.alloc(0x20)
+                if (libPatchGame) {
+                    const ret = new NativeFunction(libPatchGame.symbols.getCurrentTexture2DInfo, 'int', ['pointer', 'int'])(currentTexture2DLevelInfo, level);
+                    if (ret < 0) {
+                        console.log(`getCurrentTexture2DInfo with ${level} failed ${ret}`)
+                        return;
+                    }
+                }
+                const currentTexture2DLevelWidth             = currentTexture2DLevelInfo.add(4 * 0).readS32();
+                const currentTexture2DLevelHeight            = currentTexture2DLevelInfo.add(4 * 1).readS32();
+                const currentTexture2DLevelInternalFormat    = currentTexture2DLevelInfo.add(4 * 2).readS32();
+                const currentTexture2DLevelIsCompressed      = currentTexture2DLevelInfo.add(4 * 3).readS32();
+
                 const levelsKey = `${level}`
                 let levelItem = textureItem.levels[levelsKey];
                 if (levelItem == undefined) {
                     levelItem = textureItem.levels[levelsKey] = {
-                        width: xoffset + width,
-                        height: yoffset + height,
-                        internalFormat: 0,
-                        border: 0,
+                        width: currentTexture2DLevelWidth,
+                        height: currentTexture2DLevelHeight,
+                        internalFormat: currentTexture2DLevelInternalFormat,
+                        compressed: !!currentTexture2DLevelIsCompressed,
                         pixels: [],
                     }
                 }
 
                 textureItem.levels[levelsKey].pixels.push({
-                    width, height,
-                    xoffset, yoffset,
+                    width, 
+                    height,
+                    xoffset, 
+                    yoffset,
                     data,
                     format,
                     type,
-                    compressed,
                 })
 
             }
@@ -311,18 +341,17 @@ const hookGame = (info:{[key:string]:any}) => {
 
     const hooksForTexture2D : {p:NativePointer, name?:string , opts:HookFunActionOptArgs} [] = [
 
-{p:Module.getExportByName(soname,"glBindTexture"     ) , name :"glBindTexture"    , opts:{
-    // void glBindTexture(	GLenum target,
-    //     GLuint texture);
-    hide:true,
-    enterFun(args, tstr, thiz) {
-        const target  = thiz.args0.toUInt32();
-        const texture = thiz.args1.toUInt32();
-        if(target == targets_GLES2['GL_TEXTURE_2D']){
-            currentTexture2DId = texture;
-        }
-    },
-},},
+// {p:Module.getExportByName(soname,"glBindTexture"     ) , name :"glBindTexture"    , opts:{
+//     // void glBindTexture(	GLenum target,
+//     //     GLuint texture);
+//     hide:true,
+//     enterFun(args, tstr, thiz) {
+//         const target  = thiz.args0.toUInt32();
+//         const texture = thiz.args1.toUInt32();
+//         if(target == targets_GLES2['GL_TEXTURE_2D']){
+//         }
+//     },
+// },},
 
 {p:Module.getExportByName(soname,"glCompressedTexImage2D"     ) , name :"glCompressedTexImage2D"    , opts:{
 
@@ -348,9 +377,18 @@ const hookGame = (info:{[key:string]:any}) => {
         const data               = thiz.args7;
 
         const pixData            = !data.isNull() ? base64Encode(data, dataLength) : undefined;
-        console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border}, ${data})  pixData: ${pixData ? pixData.length : undefined} currentTexture2DId: ${currentTexture2DId} `);
+        console.log(tstr, `glCompressedTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border}, ${data})  pixData: ${pixData ? pixData.length : undefined}  `);
 
-        addNewTexture(target, level, internalFormat, width, height, border, true, pixData, );
+        const currentTexture2DId = (libPatchGame) 
+            ? new NativeFunction(libPatchGame.symbols.getCurrentTexture2DId, 'int', [])() 
+            : 0;
+        if(currentTexture2DId <= 0){
+            console.log(`currentTexture2DId(${currentTexture2DId}) <= 0`);
+            return ;
+        }
+
+
+        addNewTexture(target, currentTexture2DId, level, internalFormat, width, height, border, true, pixData, );
 
         if (1) {
             const fn = `${dumpDir}/${('00000000' + fileNo).slice(-8)}.json`;
@@ -368,6 +406,7 @@ const hookGame = (info:{[key:string]:any}) => {
                 writeJsonInfo(fn, {
                     function: "glCompressedTexImage2D",
                     data: dumpdata,
+                    textureId: currentTexture2DId,
                 }); 
                 fileNo++;
             }
@@ -402,9 +441,18 @@ const hookGame = (info:{[key:string]:any}) => {
         const data               = thiz.args8;
 
         const pixData            = (!data.isNull() && dataLength>0) ? base64Encode(data, dataLength) : undefined;
-        console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) pixData ${pixData? pixData.length : undefined} currentTexture2DId: ${currentTexture2DId}`);
+        console.log(tstr, `glCompressedTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${data}) pixData ${pixData? pixData.length : undefined} `);
 
-        addSubData(target, level, xoffset, yoffset, width, height, true, pixData, format, );
+        const currentTexture2DId = (libPatchGame) 
+            ? new NativeFunction(libPatchGame.symbols.getCurrentTexture2DId, 'int', [])() 
+            : 0;
+        if(currentTexture2DId <= 0){
+            console.log(`currentTexture2DId(${currentTexture2DId}) <= 0`);
+            return ;
+        }
+
+
+        addSubData(target, currentTexture2DId, level, xoffset, yoffset, width, height, true, pixData, format, );
 
 
         if (1) {
@@ -425,6 +473,7 @@ const hookGame = (info:{[key:string]:any}) => {
                 writeJsonInfo(fn, {
                     function: "glCompressedTexSubImage2D",
                     data: dumpdata,
+                    textureId: currentTexture2DId,
                 }); 
                 fileNo++;
 
@@ -465,8 +514,17 @@ const hookGame = (info:{[key:string]:any}) => {
         )
         const pixData = data.isNull() ? undefined : base64Encode(data, dataLength);
 
-        addNewTexture(target, level, internalFormat, width, height, border, false, pixData, format, type);
-        console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) pixData : ${pixData? pixData.length : undefined}  currentTexture2DId: ${currentTexture2DId}`);
+        const currentTexture2DId = (libPatchGame) 
+            ? new NativeFunction(libPatchGame.symbols.getCurrentTexture2DId, 'int', [])() 
+            : 0;
+        if(currentTexture2DId <= 0){
+            console.log(`currentTexture2DId(${currentTexture2DId}) <= 0`);
+            return ;
+        }
+
+
+        addNewTexture(target, currentTexture2DId, level, internalFormat, width, height, border, false, pixData, format, type);
+        console.log(tstr, `glTexImage2D( ${target} , ${level} , ${internalFormat} , ${width} , ${height} , ${border} , ${format} , ${type} , ${data}) pixData : ${pixData? pixData.length : undefined} `);
 
         if (1) {
             if (pixData) {
@@ -486,6 +544,7 @@ const hookGame = (info:{[key:string]:any}) => {
                 writeJsonInfo(fn, {
                     function: "glTexImage2D",
                     data: dumpdata,
+                    textureId: currentTexture2DId,
                 }); 
                 fileNo++;
 
@@ -527,10 +586,18 @@ const hookGame = (info:{[key:string]:any}) => {
         )
 
         const pixData = data.isNull() ? undefined : base64Encode(data, dataLength);
+        const currentTexture2DId = (libPatchGame) 
+            ? new NativeFunction(libPatchGame.symbols.getCurrentTexture2DId, 'int', [])() 
+            : 0;
+        if(currentTexture2DId <= 0){
+            console.log(`currentTexture2DId(${currentTexture2DId}) <= 0`);
+            return ;
+        }
 
-        addSubData(target, level, xoffset, yoffset, width, height,false, pixData, format, type);
 
-        console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) pixData : ${pixData? pixData.length : undefined}  currentTexture2DId: ${currentTexture2DId}`);
+        addSubData(target, currentTexture2DId, level, xoffset, yoffset, width, height,false, pixData, format, type);
+
+        console.log(tstr, `glTexSubImage2D( ${target} , ${level} , ${xoffset} , ${yoffset}, ${width} , ${height} , ${format} , ${type} , ${data}) pixData : ${pixData? pixData.length : undefined} `);
 
         if (1) {
 
@@ -551,15 +618,10 @@ const hookGame = (info:{[key:string]:any}) => {
                 writeJsonInfo(fn, {
                     function: "glTexSubImage2D",
                     data: dumpdata,
+                    textureId: currentTexture2DId,
                 }); 
                 fileNo++;
 
-            }
-        }
-
-        {
-            if(libPatchGame){
-                new NativeFunction(libPatchGame.symbols.testOpenGL, 'void', [])();
             }
         }
 

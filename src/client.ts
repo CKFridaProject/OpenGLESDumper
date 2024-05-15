@@ -106,11 +106,20 @@ function drawTexture2DGL(gl: any, texture: any) {
     // draw the rectangle
     gl.bindTexture(target, texture);
     gl.uniform1i(textureLocation, 0);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.finish();
 }
 
 
-function calcCompressedDataLength(width: number, height: number, format: number, ext_etc: any, ext_astc: any): number {
+function calcCompressedDataLength(
+    width: number, 
+    height: number, 
+    format: number, 
+    ext_etc: any, 
+    ext_etc1: any, 
+    ext_astc: any): number {
     let blockSizeInBits: number;
 
     switch (format) {
@@ -126,6 +135,9 @@ function calcCompressedDataLength(width: number, height: number, format: number,
         case ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR:
             blockSizeInBits = 128; // ASTC uses 128 bits/block for all formats
             break;
+        case ext_etc1.COMPRESSED_RGB_ETC1_WEBGL:
+            blockSizeInBits = 64; // ETC1 is 64 bits per block
+            break;
         default:
             throw new Error('Unsupported format ' + format);
     }
@@ -138,8 +150,9 @@ function calcCompressedDataLength(width: number, height: number, format: number,
     return numBlocks * blockSizeInBytes;
 }
 
-function getGlCompressImageFormat(format: number, ext_etc: any, ext_astc: any) {
+function getGlCompressImageFormat(format: number, ext_etc: any, ext_etc1: any,  ext_astc: any) {
     const formatName = findName(format, formats_GLES2);
+    if (formatName === 'GL_ETC1_RGB8_OES') return ext_etc1.COMPRESSED_RGB_ETC1_WEBGL;
     if (formatName === 'GL_COMPRESSED_RGB8_ETC2') return ext_etc.COMPRESSED_RGB8_ETC2;
     if (formatName === 'GL_COMPRESSED_RGBA8_ETC2_EAC') return ext_etc.COMPRESSED_RGBA8_ETC2_EAC;
     if (formatName === 'GL_COMPRESSED_RGBA_ASTC_4x4_KHR') return ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR;
@@ -180,53 +193,130 @@ function base64ToUint8Array(base64String: string): Uint8Array {
 }
 
 
+function saveCanvasToFile(gl:any, fn:string) {
+    var viewport = gl.getParameter(gl.VIEWPORT);                                                                                     
+    var canvasData = new Uint8Array(viewport[2] * viewport[3] * 4);                                                                  
+    gl.readPixels(0, 0, viewport[2], viewport[3], gl.RGBA, gl.UNSIGNED_BYTE, canvasData);                                            
+    // console.log('canvasData', canvasData)                                                                                          
+                                                                                                                                     
+    var canvas = document.createElement('canvas');                                                                                   
+    canvas.width = viewport[2];                                                                                                      
+    canvas.height = viewport[3];                                                                                                     
+                                                                                                                                     
+    var ctx : any= canvas.getContext('2d');                                                                                               
+                                                                                                                                     
+    // create ImageData object                                                                                                       
+    var idata = ctx.createImageData(canvas.width, canvas.height);                                                                    
+                                                                                                                                     
+    // set our buffer as source                                                                                                      
+    idata.data.set(canvasData);                                                                                                      
+                                                                                                                                     
+    // update canvas with new data                                                                                                   
+    ctx.putImageData(idata, 0, 0);                                                                                                   
+                                                                                                                                     
+    // get base64-encoded data from the canvas                                                                                       
+    var dataURI = canvas.toDataURL(); // default is PNG                                                                              
+                                                                                                                                     
+    var link = document.createElement('a');                                                                                          
+    link.href = dataURI;
+    link.download = fn;
+    link.click();
+
+}
 
 
-const appImages = async (appDiv : HTMLDivElement) => {
-
-
-    const list = document.createElement('ul');
-
-    appDiv.appendChild(list);
-
-    const detailDiv = document.createElement('div');
-    appDiv.appendChild(detailDiv);
-
-    const canvas = document.createElement('canvas');
-    appDiv.appendChild(canvas)
-
-    let gl: any = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    // Check if the extension is available
-    let ext_etc = gl.getExtension('WEBGL_compressed_texture_etc');
-    if (!ext_etc) {
-        alert('WEBGL_compressed_texture_etc not available');
-    }
-
-    // Check if the extension is available
-    let ext_astc = gl.getExtension('WEBGL_compressed_texture_astc');
-    if (!ext_astc) {
-        alert('WEBGL_compressed_texture_astc is not available');
-    }
-
-
-    list.style.overflowY = 'scroll';
-    list.style.maxHeight = '200px';
-
-
-
-    let selectedIdx = -1; // Will be updated upon user interaction
-    let countAllImages = -1;
-
+const appImages = async (appDiv: HTMLDivElement) => {
 
     var socket = io();
     socket.emit('get_images');
-    socket.on('images', (images:{
-            fn: string;
-            data: DUMP_DATA;
-        }[]) => {
+    socket.on('images', (images: {
+        fn: string;
+        data: DUMP_DATA;
+    }[]) => {
 
-            console.log(`images:`, images.length);
-            countAllImages = images.length;
+
+        const list = document.createElement('ul');
+
+        appDiv.appendChild(list);
+
+        const detailDiv = document.createElement('div');
+        appDiv.appendChild(detailDiv);
+
+        {
+            const div = document.createElement('div');
+            const btn = document.createElement('button');
+            btn.textContent = 'download';
+            div.appendChild(btn);
+            appDiv.appendChild(div);
+
+            btn.addEventListener('click', () => {
+                console.log('download');
+                requestAnimationFrame(function () {
+                    saveCanvasToFile(gl, 'tt.png')
+                })
+            });
+        }
+
+        {
+
+            const div = document.createElement('div');
+            const btn = document.createElement('button');
+            btn.textContent = 'batch download';
+            div.appendChild(btn);
+            appDiv.appendChild(div);
+
+            btn.addEventListener('click', () => {
+                (async () => {
+                    console.log(`batch download for all images (${countAllImages})`);
+                    for (let t = 0; t < countAllImages; t++) {
+                        console.log('download', t);
+                        const fn = `0000000${t}`.slice(-8) + '.png'
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        const image = images[t];
+                        updateDetail(image.fn, image.data);
+                        saveCanvasToFile(gl, fn);
+                    }
+                })();
+            });
+        }
+
+
+
+        const canvas = document.createElement('canvas');
+        appDiv.appendChild(canvas)
+
+        const glConfig = {
+            preserveDrawingBuffer: true,
+        }
+        let gl: any = canvas.getContext('webgl', glConfig)
+            || canvas.getContext('experimental-webgl', glConfig);
+        // Check if the extension is available
+        let ext_etc = gl.getExtension('WEBGL_compressed_texture_etc');
+        if (!ext_etc) {
+            alert('WEBGL_compressed_texture_etc not available');
+        }
+
+        let ext_etc1 = gl.getExtension('WEBGL_compressed_texture_etc1');
+        if (!ext_etc1) {
+            alert('WEBGL_compressed_texture_etc not available');
+        }
+
+
+        // Check if the extension is available
+        let ext_astc = gl.getExtension('WEBGL_compressed_texture_astc');
+        if (!ext_astc) {
+            alert('WEBGL_compressed_texture_astc is not available');
+        }
+
+        list.style.overflowY = 'scroll';
+        list.style.maxHeight = '200px';
+
+        let selectedIdx = -1; // Will be updated upon user interaction
+        let countAllImages = -1;
+
+
+        console.log(`images:`, images.length);
+        countAllImages = images.length;
 
         {
             // Highlight the selected item
@@ -272,7 +362,7 @@ const appImages = async (appDiv : HTMLDivElement) => {
 
                 const fun = dumpData.function;
                 const data = dumpData.data;
-                listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height}`
+                listItem.textContent = `${fn} ${fun}  ${data.width} ${data.height} `
                 listItem.tabIndex = index; // This makes the li focusable
                 listItem.addEventListener('click', () => {
                     selectedIdx = index;
@@ -283,126 +373,119 @@ const appImages = async (appDiv : HTMLDivElement) => {
                 list.appendChild(listItem);
             });
         }
-    });
 
-    const drawImage = (canvas:HTMLCanvasElement, dumpData:DUMP_DATA) => {
+        const drawImage = (canvas: HTMLCanvasElement, dumpData: DUMP_DATA) => {
 
-        const fun = dumpData.function;
-        const width = dumpData.data.width;
-        const height = dumpData.data.height;
+            const fun = dumpData.function;
+            const width = dumpData.data.width;
+            const height = dumpData.data.height;
 
-        canvas.width = width;
-        canvas.height = height;
-
-
-        gl.viewport(0, 0, width, height);
-        let target = gl.TEXTURE_2D;
-
-        let texture = gl.createTexture();
+            canvas.width = width;
+            canvas.height = height;
 
 
+            gl.viewport(0, 0, width, height);
+            let target = gl.TEXTURE_2D;
 
-        switch(fun){
-            case 'glTexImage2D': {
-                const data = dumpData.data as glTexImage2D_DATA;
-                const pixelData = base64ToUint8Array(data.data)
-                // target = data.target;
-                gl.bindTexture(target, texture);
-                gl.texImage2D(
-                    target,
-                    data.level,
-                    data.internalFormat,
-                    data.width, 
-                    data.height, 
-                    data.border, 
-                    data.format,
-                    data.type,
-                    pixelData);
+            let texture = gl.createTexture();
+
+
+
+            switch (fun) {
+                case 'glTexImage2D': {
+                    const data = dumpData.data as glTexImage2D_DATA;
+                    const pixelData = base64ToUint8Array(data.data)
+                    // target = data.target;
+                    gl.bindTexture(target, texture);
+                    gl.texImage2D(
+                        target,
+                        data.level,
+                        data.internalFormat,
+                        data.width,
+                        data.height,
+                        data.border,
+                        data.format,
+                        data.type,
+                        pixelData);
+                }
+                    break;
+
+                case 'glTexSubImage2D': {
+                    const data = dumpData.data as glTexSubImage2D_DATA;
+                    const pixelData = base64ToUint8Array(data.data)
+                    // target = data.target;
+                    gl.bindTexture(target, texture);
+                    gl.texImage2D(
+                        target,
+                        data.level,       // level
+                        data.format,      // internalFormat
+                        data.width,       // width
+                        data.height,      // height
+                        0,                // border
+                        data.format,      // format
+                        data.type,        // type
+                        pixelData,        // data (null for an empty texture)
+                    );
+                }
+                    break;
+
+
+                case 'glCompressedTexSubImage2D': {
+                    const data = dumpData.data as glCompreesdTexSubImage2D_DATA;
+                    // target = data.target;
+                    gl.bindTexture(target, texture);
+                    const pixelData = base64ToUint8Array(data.data)
+                    const glFormat = getGlCompressImageFormat(data.format, ext_etc, ext_etc1, ext_astc);
+                    console.log('target', data.target, findName(data.target, targets_GLES2), gl.TEXTURE_2D,)
+                    console.log('level', data.level,)
+                    console.log('xoffset', data.xoffset,)
+                    console.log('yoffset', data.yoffset,)
+                    console.log('width', data.width,)
+                    console.log('height', data.height,)
+                    console.log('format', data.format, glFormat.toString(16), glFormat)
+                    console.log('pixelData', pixelData.length);
+                    const pixelDataLength = calcCompressedDataLength(data.width, data.height, glFormat, ext_etc, ext_etc1, ext_astc);
+                    gl.compressedTexImage2D(
+                        target,
+                        0,
+                        glFormat,
+                        width,
+                        height,
+                        0,
+                        pixelData.slice(0, pixelDataLength),
+                    );
+                }
+                    break;
+
+                default:
+                    console.log('unknown function: ' + fun);
             }
-            break;
 
-            case 'glTexSubImage2D': {
-                const data = dumpData.data as glTexSubImage2D_DATA;
-                const pixelData = base64ToUint8Array(data.data)
-                // target = data.target;
-                gl.bindTexture(target, texture);
-                gl.texImage2D(
-                    target,
-                    data.level,       // level
-                    data.format,      // internalFormat
-                    data.width,       // width
-                    data.height,      // height
-                    0,                // border
-                    data.format,      // format
-                    data.type,        // type
-                    null              // data (null for an empty texture)
-                  );
-                gl.texSubImage2D(
-                    data.target,
-                    data.level,
-                    data.xoffset,
-                    data.yoffset,
-                    data.width, 
-                    data.height, 
-                    data.format,
-                    data.type,
-                    pixelData);
-            }
-            break;
+            drawTexture2DGL(gl, texture);
 
 
-            case 'glCompressedTexSubImage2D':{
-                const data = dumpData.data as glCompreesdTexSubImage2D_DATA;
-                // target = data.target;
-                gl.bindTexture(target, texture);
-                const pixelData = base64ToUint8Array(data.data)
-                const glFormat = getGlCompressImageFormat(data.format, ext_etc, ext_astc);
-                console.log('target', data.target,  findName(data.target, targets_GLES2), gl.TEXTURE_2D,)
-                console.log('level', data.level, )
-                console.log('xoffset', data.xoffset, )
-                console.log('yoffset', data.yoffset, )
-                console.log('width', data.width, )
-                console.log('height', data.height,) 
-                console.log('format', data.format, findName(data.format, formats_GLES2), glFormat)
-                console.log('pixelData', pixelData.length);
-                const pixelDataLength = calcCompressedDataLength(data.width, data.height, glFormat, ext_etc, ext_astc);
-                gl.compressedTexImage2D(
-                    target, 
-                    0,
-                    glFormat, 
-                    width, 
-                    height, 
-                    0, 
-                    pixelData.slice(0,pixelDataLength),
-                );
-            }
-            break;
 
-            default:
-                console.log('unknown function: ' + fun);
         }
 
-        drawTexture2DGL(gl, texture);
+
+
+        function updateDetail(name: string, item: DUMP_DATA) {
+            detailDiv.textContent = name;
+            console.log('updateDetail', name, item);
+
+            drawImage(canvas, item);
+        }
+
+
+        const firstChild = list.firstChild;
+
+        if (firstChild && firstChild instanceof HTMLElement) {
+            firstChild.click();
+        }
 
 
 
-    }
-
-
-
-    function updateDetail(name: string, item: DUMP_DATA) {
-        detailDiv.textContent = name;
-        console.log('updateDetail', name, item);
-
-        drawImage(canvas, item);
-    }
-
-
-    const firstChild = list.firstChild;
-
-    if (firstChild && firstChild instanceof HTMLElement) {
-        firstChild.click();
-    }
+    });
 
 }
 
@@ -420,7 +503,7 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
         function createTree(key:string, textureData: Texture_DATA) {
             const textureNode = document.createElement('li');
             const levels = Object.keys(textureData.levels).length;
-            textureNode.textContent = `${key} Type: ${ textureData.type }  Levels: ${levels }`;
+            textureNode.textContent = `${key} Type: ${ textureData.type }  Levels: ${levels } Datasize: ${textureData.levels[0].pixels.length} Compressed: ${textureData.levels[0].compressed}`;
 
             if(levels> 0){
                 textureNode.addEventListener('click', () => {
@@ -455,6 +538,14 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
             alert('WEBGL_compressed_texture_etc not available');
         }
 
+        let ext_etc1 = gl.getExtension('WEBGL_compressed_texture_etc1');
+
+        if (!ext_etc1) {
+            alert('WEBGL_compressed_texture_etc1 not supported');
+        }
+
+
+
         // Check if the extension is available
         let ext_astc = gl.getExtension('WEBGL_compressed_texture_astc');
         if (!ext_astc) {
@@ -463,14 +554,13 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
 
         const drawTexture = (canvas: HTMLCanvasElement, textureData: Texture_DATA) => {
 
-            const level0 = textureData.levels[0];
 
-            const width  = level0.width;
-            const height = level0.height;
+            const level0 = textureData.levels[0];
+            const {internalFormat, width, height} = level0;
+
 
             canvas.width = width;
             canvas.height = height;
-
 
             gl.viewport(0, 0, width, height);
 
@@ -486,18 +576,22 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
                     const pixels = level0.pixels;
                     let imageWidth = Math.max(...pixels.map(data => data.xoffset + data.width));
                     let imageHeight= Math.max(...pixels.map(data => data.yoffset + data.height));
-                    let compressed = pixels.some(data => data.compressed);
-                    if(!compressed){
-                    gl.texImage2D(
-                        target,
-                        0,
-                        level0.internalFormat,
-                        imageWidth,
-                        imageHeight,
-                        0,
-                        level0.pixels[0].format,
-                        level0.pixels[0].type,
-                        null);
+                    let compressed = level0.compressed;
+                    console.log(`level0 internalFormat: ${internalFormat} ${findName(internalFormat, internalFormats_GLES2)}  ${internalFormat.toString(16)} width: ${width} height: ${height} compressed: ${compressed}`);
+                    if(compressed){
+                        
+                    }
+                    else {
+                        gl.texImage2D(
+                            target,
+                            0,
+                            gl.RGBA, // level0.internalFormat,
+                            imageWidth,
+                            imageHeight,
+                            0,
+                            pixels[0].format,
+                            pixels[0].type,
+                            null);
                     }
 
                     // pass data
@@ -506,7 +600,19 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
                         console.log('data', data)
                         console.log('data fromat', findName(data.format, formats_GLES2))
                         const pixelData = base64ToUint8Array(data.data)
-                        if(data.compressed){
+                        if(compressed){
+                            if(data.xoffset == 0 && data.yoffset == 0){
+                                gl.compressedTexImage2D(
+                                    target, 
+                                    0,
+                                    data.format,
+                                    data.width, 
+                                    data.height, 
+                                    0,
+                                    pixelData
+                                );
+                            }
+                            else {
                                 gl.compressedTexSubImage2D(
                                     target, 
                                     0,
@@ -517,7 +623,7 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
                                     data.format,
                                     pixelData
                                 );
-
+                            }
                         }
                         else{
                                 gl.texSubImage2D(
@@ -527,7 +633,7 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
                                     data.yoffset,
                                     data.width, 
                                     data.height, 
-                                    data.format,
+                                    data.format == gl.RED ? gl.ALPHA8 : data.format,
                                     data.type || gl.UNSIGNED_BYTE, 
                                     pixelData);
                         }

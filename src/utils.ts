@@ -8,12 +8,11 @@ export interface LEVEL_DATA {
         data         : string,
         format       : number,
         type        ?: number,
-        compressed   : boolean,
     }[],
-    width: number,
-    height: number,
-    border: number,
-    internalFormat: number,
+    width           : number,
+    height          : number,
+    internalFormat  : number,
+    compressed      : boolean,
 }
 
 export interface Texture_DATA {
@@ -75,6 +74,8 @@ export interface DUMP_DATA {
                 | 'glCompressedTexImage2D'
                 | 'glCompressedTexSubImage2D'
                 ;
+    
+    textureId   : number;
 
     data        : glTexImage2D_DATA
                 | glTexSubImage2D_DATA
