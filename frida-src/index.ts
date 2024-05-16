@@ -654,10 +654,9 @@ const hookGame = (info:{[key:string]:any}) => {
                 allCommands.pop();
                 if (libPatchGame) {
                     const m = Process.getModuleByName(soname);
-                    new NativeFunction(libPatchGame.symbols.startOpenGLCmd, 'int', ['pointer', 'pointer','int'])(
+                    new NativeFunction(libPatchGame.symbols.startOpenGLCmd, 'int', ['pointer', 'pointer'])(
                         m.base,
                         Memory.allocUtf8String(dumpDir),
-                        100,
                     );
                 }
             }

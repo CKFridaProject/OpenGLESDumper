@@ -366,13 +366,228 @@ int listAllTexture2Ds(unsigned char* base, const char* outputDir) {
     return 0;
 }
 
-static int glRunCount = -1;
-static int glMaxCount = -1;
-extern "C" int __attribute__((visibility("default"))) startOpenGLCmd (unsigned char* base, const char* outputDir, int c) {
-    if(c>0) {
-        glMaxCount = c; 
-        glRunCount = 0;
+#include <GLES3/gl3.h>
+#include <iostream>
+#include <string>
+
+// Function to compile a shader and check for errors
+GLuint loadShader(GLenum type, const char* src)
+{
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &src, NULL);
+    glCompileShader(shader);
+    return shader;
+}
+
+// Function to check for shader or program errors
+void checkCompileErrors(GLuint shader, std::string type)
+{
+    GLint success;
+    GLchar infoLog[1024];
+    if(type != "PROGRAM")
+    {
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+        if(!success)
+        {
+            glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+            LOG_INFOS ("Shader compilation error of type: %s ", type.c_str());
+            LOG_INFOS ("%s", infoLog);
+        }
     }
+    else
+    {
+        glGetProgramiv(shader, GL_LINK_STATUS, &success);
+        if(!success)
+        {
+            glGetProgramInfoLog(shader, 1024, NULL, infoLog);
+            LOG_INFOS ("Program linking error of type: %s ", type.c_str());
+            LOG_INFOS ("%s", infoLog);
+        }
+    }
+}
+
+// Function to create a shader program from vertex and fragment shader sources
+GLuint createProgram(const char* vertexShaderSource, const char* fragmentShaderSource)
+{
+    GLuint vertexShader = loadShader(GL_VERTEX_SHADER, vertexShaderSource);
+    checkCompileErrors(vertexShader, "vertex");
+    GLuint fragmentShader = loadShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
+    checkCompileErrors(fragmentShader, "fragment");
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    checkCompileErrors(program, "PROGRAM");
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    return program;
+}
+
+// int main()
+// {
+//     // Your OpenGL context initialization code here...
+// 
+//     const char *vertexShaderSource = "...";  // Your vertex shader source here
+//     const char *fragmentShaderSource = "..."; // Your fragment shader source here
+//     GLuint program = createProgram(vertexShaderSource, fragmentShaderSource);
+//     
+//     // Your OpenGL rendering code here...
+//     
+//     glDeleteProgram(program);
+// 
+//     // Your OpenGL context cleanup code here...
+// 
+//     return 0;
+// }
+
+// Shaders
+GLchar* vertexShaderSource = 
+    "#version 320 es                    \n"
+    "in vec4 position;                  \n"
+    "in vec2 texCoords;                 \n"
+    "out vec2 TexCoords;                \n"
+    "void main()                        \n"
+    "{                                  \n"
+    "    gl_Position = position;        \n"
+    "    TexCoords = texCoords;         \n"
+    "}                                  \n";
+
+GLchar* fragmentShaderSource =
+    "#version 320 es                            \n"
+    "precision mediump float;                   \n"
+    "in vec2 TexCoords;                         \n"
+    "uniform sampler2D sampler;                 \n"
+    "out vec4 color;                            \n"
+    "void main()                                \n"
+    "{                                          \n"
+    "    color = texture(sampler, TexCoords);   \n"
+    "}                                          \n";
+
+// Full-screen quad
+GLfloat quadVertices[] = {
+    -1.0f,  1.0f,  0.0f,  0.0f, 1.0f,
+    -1.0f, -1.0f,  0.0f,  0.0f, 0.0f,
+     1.0f, -1.0f,  0.0f,  1.0f, 0.0f,
+
+     1.0f, -1.0f,  0.0f,  1.0f, 0.0f,
+     1.0f,  1.0f,  0.0f,  1.0f, 1.0f,
+    -1.0f,  1.0f,  0.0f,  0.0f, 1.0f
+};
+
+class TextureDumper {
+
+
+public:
+    TextureDumper() {
+    }
+
+    ~TextureDumper() {
+    }
+
+    void start () {
+        glRunCount = 0;
+        glMaxCount = 100;
+    }
+
+    int tick () {
+
+
+        {
+            if(glRunCount==1)
+        {
+    // Application-specific setup code here...
+
+    // 1. Create the uncompressed texture
+    GLuint uncompressedTexture;
+    glGenTextures(1, &uncompressedTexture);
+    glBindTexture(GL_TEXTURE_2D, uncompressedTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    // 2. Create and set up the framebuffer
+    GLuint framebuffer;
+    glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, uncompressedTexture, 0);
+
+    // 3. Render the compressed texture to the framebuffer using a shader
+    GLuint compressedTexture = textureId; 
+
+    //GLuint program = ...; // Implement shader compilation and program creation
+    GLuint program = createProgram(vertexShaderSource, fragmentShaderSource);
+
+    GLuint VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+
+    glUseProgram(program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, compressedTexture);
+    glUniform1i(glGetUniformLocation(program, "sampler"), 0);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    // 4. Read pixel data
+    GLubyte* pixels = new GLubyte[width * height * 4];
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    _frida_hexdump(pixels, 0x100);
+
+    FILE *outFile = fopen("/data/data/com.Joymax.GreatMagician/files/tt.bin", "wb");
+    if (outFile == NULL) {
+        LOG_INFOS("Failed to open file: ");
+
+    } else {
+        // Write width, height, and format
+        fwrite(&width, sizeof(width), 1, outFile);
+        fwrite(&height, sizeof(height), 1, outFile);
+        GLenum format = GL_RGBA;
+        fwrite(&format, sizeof(format), 1, outFile);
+
+        // Write the pixel data
+        fwrite(pixels, 1, width * height * 4, outFile);
+        fclose(outFile);
+    }
+
+    // 5. Clean up
+    delete[] pixels;
+    glDeleteFramebuffers(1, &framebuffer);
+    glDeleteTextures(1, &uncompressedTexture);
+    glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteProgram(program);
+
+    // Application-specific shutdown code here...
+}
+
+
+        }
+
+        if(glRunCount < glMaxCount) {
+            glRunCount++;
+        }
+        return glRunCount;
+    }
+
+private:
+    int glRunCount = -1;
+    int glMaxCount = -1;
+    int textureId = 189;
+    int width = 512, height = 512, textureFormat = 0x9278, isCompressed = 1;
+}; 
+
+TextureDumper gTextureDumper;
+
+extern "C" int __attribute__((visibility("default"))) startOpenGLCmd (unsigned char* base, const char* outputDir ) {
+    gTextureDumper.start();
     return 0;
 }
 extern "C" int __attribute__((visibility("default"))) hookOpenGL (unsigned char* base, const char* outputDir) {
@@ -394,59 +609,9 @@ extern "C" int __attribute__((visibility("default"))) hookOpenGL (unsigned char*
         listAllTexture2Ds(base, outputDir);
     }
 
-
-    static int textureId = 188;
-    static int width = 892, height = 980, textureFormat = 0x9278, isCompressed = 1;
-    static GLuint framebuffer = 0, renderbuffer=0;
-    if (glRunCount == 0) {
+    gTextureDumper.tick();
 
 
-        // Set up framebuffer and renderbuffer
-        glGenFramebuffers(1, &framebuffer);
-        LOG_INFOS("error %d ", glGetError()==GL_NO_ERROR);
-
-        glGenRenderbuffers(1, &renderbuffer);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
-
-        //glBindTexture(GL_TEXTURE_2D, textureId);
-        //LOG_INFOS("error %d ", glGetError()==GL_NO_ERROR);
-        // Attach the texture to the FBO
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
-    } else if (glRunCount == 3) {
-
-
-        //glBindTexture(GL_TEXTURE_2D, textureId);
-        //LOG_INFOS("error %d ", glGetError()==GL_NO_ERROR);
-        // Check FBO status
-        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            LOG_INFOS("Failed to setup Framebuffer status: %d with format: %x(%s)", status, textureFormat, getInternalFormatsGLES2(textureFormat));
-        }
-        else{
-            LOG_INFOS("Success to setup Framebuffer status: %d with format: %x(%s)", status, textureFormat, getInternalFormatsGLES2(textureFormat));
-        }
-
-        // Read the pixel data
-        //glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-        // Open a binary file in write mode
-        // Write width, height, and format
-        // Write the pixel data
-
-        // Clean up
-        glDeleteFramebuffers(1, &framebuffer);
-        glDeleteRenderbuffers(1, &renderbuffer);
-
-        // Close the file
-    }
-
-    if (glRunCount < glMaxCount) {
-        glRunCount++;
-    }
     return 0;
 }
 
