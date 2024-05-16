@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <GLES3/gl32.h>
 #include <ftw.h>
 #include <sys/stat.h>
@@ -25,6 +26,7 @@ LOG_INFOS_WITH_N(N, "[%s:%d] " fmt , __FILE__, __LINE__,  ##args);
 #define LOG_INFOS(fmt, args...)  LOG_INFOS_WITH_N_FILE_LINE(0x800, fmt, ##args)
 
 
+const char* getInternalFormatsGLES2( int internalFormat ) ;
 // Write data callback function (called within the context of
 // curl_easy_perform.
 
@@ -182,15 +184,23 @@ extern "C" int __attribute__((visibility("default"))) init (unsigned char* base,
 }
 
 
-void SaveTextureToFile(GLuint textureId, int width, int height, const char* filename) {
-    glBindTexture(GL_TEXTURE_2D, textureId);
+void saveTextureToFile(GLuint textureId, int width, int height, const char* filename, int textureFormat) {
 
-    // Allocate memory for pixel data
-    GLubyte* pixels = new GLubyte[width * height * 4];
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    if (glGetError() != GL_NO_ERROR) {
+        LOG_INFOS( "Error occurred while binding the texture with %d format %x(%s)", textureId, textureFormat, getInternalFormatsGLES2(textureFormat));
+        return;
+    }
 
     // Set up framebuffer and renderbuffer
     GLuint framebuffer, renderbuffer;
     glGenFramebuffers(1, &framebuffer);
+    if (glGetError() != GL_NO_ERROR) {
+        LOG_INFOS("Error occurred while generating the framebuffern");
+        return;
+    }
+
+    GLubyte* pixels = new GLubyte[width * height * 4];
     glGenRenderbuffers(1, &renderbuffer);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -204,7 +214,7 @@ void SaveTextureToFile(GLuint textureId, int width, int height, const char* file
     // Check FBO status
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        LOG_INFOS("Failed to setup Framebuffer status: %d", status);
+        LOG_INFOS("Failed to setup Framebuffer status: %d with format: %x(%s)", status, textureFormat, getInternalFormatsGLES2(textureFormat));
         return;
     }
 
@@ -236,53 +246,207 @@ void SaveTextureToFile(GLuint textureId, int width, int height, const char* file
     // Close the file
     fclose(outFile);
 
-    LOG_INFOS("write texture to file: %s", filename);
+    // LOG_INFOS("write texture to file: %s", filename);
 }
 
+const char* getInternalFormatsGLES2( int internalFormat ) {
+    switch (internalFormat)
+    {
+    
+    case GL_RGB                                        : return "GL_RGB"                           ;
+    case GL_RGBA                                       : return "GL_RGBA"                          ;
+    case GL_LUMINANCE_ALPHA                            : return "GL_LUMINANCE_ALPHA"               ;
+    case GL_LUMINANCE                                  : return "GL_LUMINANCE"                     ;
+    case GL_ALPHA                                      : return "GL_ALPHA"                         ;
+    case GL_R8                                         : return "GL_R8"                            ;
+    case GL_R8_SNORM                                   : return "GL_R8_SNORM"                      ;
+    case GL_R16F                                       : return "GL_R16F"                          ;
+    case GL_R32F                                       : return "GL_R32F"                          ;
+    case GL_R8UI                                       : return "GL_R8UI"                          ;
+    case GL_R8I                                        : return "GL_R8I"                           ;
+    case GL_R16UI                                      : return "GL_R16UI"                         ;
+    case GL_R16I                                       : return "GL_R16I"                          ;
+    case GL_R32UI                                      : return "GL_R32UI"                         ;
+    case GL_R32I                                       : return "GL_R32I"                          ;
+    case GL_RG8                                        : return "GL_RG8"                           ;
+    case GL_RG8_SNORM                                  : return "GL_RG8_SNORM"                     ;
+    case GL_RG16F                                      : return "GL_RG16F"                         ;
+    case GL_RG32F                                      : return "GL_RG32F"                         ;
+    case GL_RG8UI                                      : return "GL_RG8UI"                         ;
+    case GL_RG8I                                       : return "GL_RG8I"                          ;
+    case GL_RG16UI                                     : return "GL_RG16UI"                        ;
+    case GL_RG16I                                      : return "GL_RG16I"                         ;
+    case GL_RG32UI                                     : return "GL_RG32UI"                        ;
+    case GL_RG32I                                      : return "GL_RG32I"                         ;
+    case GL_RGB8                                       : return "GL_RGB8"                          ;
+    case GL_SRGB8                                      : return "GL_SRGB8"                         ;
+    case GL_RGB565                                     : return "GL_RGB565"                        ;
+    case GL_RGB8_SNORM                                 : return "GL_RGB8_SNORM"                    ;
+    case GL_R11F_G11F_B10F                             : return "GL_R11F_G11F_B10F"                ;
+    case GL_RGB9_E5                                    : return "GL_RGB9_E5"                       ;
+    case GL_RGB16F                                     : return "GL_RGB16F"                        ;
+    case GL_RGB32F                                     : return "GL_RGB32F"                        ;
+    case GL_RGB8UI                                     : return "GL_RGB8UI"                        ;
+    case GL_RGB8I                                      : return "GL_RGB8I"                         ;
+    case GL_RGB16UI                                    : return "GL_RGB16UI"                       ;
+    case GL_RGB16I                                     : return "GL_RGB16I"                        ;
+    case GL_RGB32UI                                    : return "GL_RGB32UI"                       ;
+    case GL_RGB32I                                     : return "GL_RGB32I"                        ;
+    case GL_RGBA8                                      : return "GL_RGBA8"                         ;
+    case GL_SRGB8_ALPHA8                               : return "GL_SRGB8_ALPHA8"                  ;
+    case GL_RGBA8_SNORM                                : return "GL_RGBA8_SNORM"                   ;
+    case GL_RGB5_A1                                    : return "GL_RGB5_A1"                       ;
+    case GL_RGBA4                                      : return "GL_RGBA4"                         ;
+    case GL_RGB10_A2                                   : return "GL_RGB10_A2"                      ;
+    case GL_RGBA16F                                    : return "GL_RGBA16F"                       ;
+    case GL_RGBA32F                                    : return "GL_RGBA32F"                       ;
+    case GL_RGBA8UI                                    : return "GL_RGBA8UI"                       ;
+    case GL_RGBA8I                                     : return "GL_RGBA8I"                        ;
+    case GL_RGB10_A2UI                                 : return "GL_RGB10_A2UI"                    ;
+    case GL_RGBA16UI                                   : return "GL_RGBA16UI"                      ;
+    case GL_RGBA16I                                    : return "GL_RGBA16I"                       ;
+    case GL_RGBA32I                                    : return "GL_RGBA32I"                       ;
+    case GL_RGBA32UI                                   : return "GL_RGBA32UI"                      ;
+    case GL_DEPTH_COMPONENT16                          : return "GL_DEPTH_COMPONENT16"             ;
+    case GL_DEPTH_COMPONENT24                          : return "GL_DEPTH_COMPONENT24"             ;
+    case GL_DEPTH_COMPONENT32F                         : return "GL_DEPTH_COMPONENT32F"            ;
+    case GL_DEPTH24_STENCIL8                           : return "GL_DEPTH24_STENCIL8"              ;
+    case GL_DEPTH32F_STENCIL8                          : return "GL_DEPTH32F_STENCIL8"             ;
+    case GL_COMPRESSED_RGBA8_ETC2_EAC                  : return "GL_COMPRESSED_RGBA8_ETC2_EAC"     ;
+    case GL_ALPHA8_OES                                 : return "GL_ALPHA8_OES"                    ;
+    case GL_COMPRESSED_RGBA_ASTC_4x4_KHR               : return "GL_COMPRESSED_RGBA_ASTC_4x4_KHR"  ;
+    case GL_COMPRESSED_RGBA_ASTC_8x8_KHR               : return "GL_COMPRESSED_RGBA_ASTC_8x8_KHR"  ;
+    case GL_COMPRESSED_RGB8_ETC2                       : return "GL_COMPRESSED_RGB8_ETC2"          ;
+    case GL_ETC1_RGB8_OES                              : return "GL_ETC1_RGB8_OES"                 ;
 
+    default:
+        LOG_INFOS("Unknow: %d", internalFormat);
+        return "Unknow internalFormat";
+    }
+};
 
-extern "C" int __attribute__((visibility("default"))) hookOpenGL (unsigned char* base, const char* outputDir) {
-    static int count = 0;
-    if(count == 0) {
-        
-        const GLubyte* versionGL = glGetString(GL_VERSION); 
-        LOG_INFOS("versionGL: %s", versionGL);
+const int MAX_TEXTURE_CNT=3000;
+int listAllTexture2Ds(unsigned char* base, const char* outputDir) {
+    int originalTextureID = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &originalTextureID);
+    // list all texture2d
+    for (int t = 0; t < MAX_TEXTURE_CNT; t++)
+    {
+        if (glIsTexture(t)) {
+            glBindTexture(GL_TEXTURE_2D, t);
 
-        {
-            int originalTextureID = 0;
-            glGetIntegerv(GL_TEXTURE_BINDING_2D, &originalTextureID);
-            // list all texture2d
-            for ( int t=0;t< 3000;t++){
-                if(glIsTexture(t)){
-                    glBindTexture(GL_TEXTURE_2D, t);
+            int level = 0;
+            int width = 0, height = 0, internalFormat = 0, isCompressed = 0;
 
-                    int level = 0;
-                    int width=0, height=0, internalFormat=0, isCompressed=0;
+            // Get the width, height, and internal format of the currently bound texture
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &width);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &height);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_COMPRESSED, &isCompressed);
 
-                    // Get the width, height, and internal format of the currently bound texture
-                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &width);
-                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &height);
-                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
-                    glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_COMPRESSED, &isCompressed);
-                    LOG_INFOS("glIsTexture: %d width: %d, height: %d, internalFormat: 0x%x, isCompressed: %d", 
-                        t, width, height, internalFormat, isCompressed);
+            // LOG_INFOS("TextureId: %d width: %d, height: %d, internalFormat: 0x%x(%s), isCompressed: %d",
+            //           t, width, height, internalFormat, getInternalFormatsGLES2(internalFormat), isCompressed);
 
-                    {
-                        
+            if(    internalFormat == GL_RGB8
+                || internalFormat == GL_RGBA4
+                || internalFormat == GL_RGBA8
+                || internalFormat == GL_R8
+            )
+            {
 
-                        static char filename[1024];
-                        sprintf(filename,"%s/%08d.bin", outputDir, t);
-                        SaveTextureToFile(t,  width,  height, filename) ;
-
-                    }
-                }
+                static char filename[1024];
+                sprintf(filename, "%s/%08d.bin", outputDir, t);
+                saveTextureToFile(t, width, height, filename, internalFormat);
             }
-
-            glBindTexture(GL_TEXTURE_2D, originalTextureID);
-
         }
     }
-    count++;
+
+    glBindTexture(GL_TEXTURE_2D, originalTextureID);
+
+    return 0;
+}
+
+static int glRunCount = -1;
+static int glMaxCount = -1;
+extern "C" int __attribute__((visibility("default"))) startOpenGLCmd (unsigned char* base, const char* outputDir, int c) {
+    if(c>0) {
+        glMaxCount = c; 
+        glRunCount = 0;
+    }
+    return 0;
+}
+extern "C" int __attribute__((visibility("default"))) hookOpenGL (unsigned char* base, const char* outputDir) {
+    if(0) {
+        const GLubyte *versionGL = glGetString(GL_VERSION);
+        LOG_INFOS("versionGL: %s", versionGL);
+        GLint value = 0;
+        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &value);
+        LOG_INFOS("GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: %d", value);
+
+        glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &value);
+        LOG_INFOS("GL_MAX_TEXTURE_IMAGE_UNITS: %d", value);
+
+        glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &value);
+        LOG_INFOS("GL_MAX_COLOR_ATTACHMENTS: %d", value);
+    }
+
+    if(0){
+        listAllTexture2Ds(base, outputDir);
+    }
+
+
+    static int textureId = 188;
+    static int width = 892, height = 980, textureFormat = 0x9278, isCompressed = 1;
+    static GLuint framebuffer = 0, renderbuffer=0;
+    if (glRunCount == 0) {
+
+
+        // Set up framebuffer and renderbuffer
+        glGenFramebuffers(1, &framebuffer);
+        LOG_INFOS("error %d ", glGetError()==GL_NO_ERROR);
+
+        glGenRenderbuffers(1, &renderbuffer);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
+
+        //glBindTexture(GL_TEXTURE_2D, textureId);
+        //LOG_INFOS("error %d ", glGetError()==GL_NO_ERROR);
+        // Attach the texture to the FBO
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
+    } else if (glRunCount == 3) {
+
+
+        //glBindTexture(GL_TEXTURE_2D, textureId);
+        //LOG_INFOS("error %d ", glGetError()==GL_NO_ERROR);
+        // Check FBO status
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            LOG_INFOS("Failed to setup Framebuffer status: %d with format: %x(%s)", status, textureFormat, getInternalFormatsGLES2(textureFormat));
+        }
+        else{
+            LOG_INFOS("Success to setup Framebuffer status: %d with format: %x(%s)", status, textureFormat, getInternalFormatsGLES2(textureFormat));
+        }
+
+        // Read the pixel data
+        //glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        // Open a binary file in write mode
+        // Write width, height, and format
+        // Write the pixel data
+
+        // Clean up
+        glDeleteFramebuffers(1, &framebuffer);
+        glDeleteRenderbuffers(1, &renderbuffer);
+
+        // Close the file
+    }
+
+    if (glRunCount < glMaxCount) {
+        glRunCount++;
+    }
     return 0;
 }
 

@@ -37,6 +37,13 @@ import {
 
 let libPatchGame : INFO_TYPE | null = null;
 
+interface CMD_DATA {
+    cmd     : string,
+    args   ?: string[],
+};
+
+const allCommands : CMD_DATA[] = [ ]
+
 /**
  * Dump memory contents starting from a given address.
  * 
@@ -641,12 +648,28 @@ const hookGame = (info:{[key:string]:any}) => {
 {p:Module.getExportByName('libEGL.so',"eglSwapBuffers"     ) , name :"eglSwapBuffers"    , opts:{
     hide:true,
     enterFun(args, tstr, thiz) {
-        if(libPatchGame){
-            const m = Process.getModuleByName(soname);
-            new NativeFunction(libPatchGame.symbols.hookOpenGL,'int',['pointer','pointer'])(
-                m.base,
-                Memory.allocUtf8String(dumpDir),
-            );
+        {
+            const command = allCommands.length>0 ? allCommands[allCommands.length - 1] : undefined;
+            if (command?.cmd==='OpenGLTest') {
+                allCommands.pop();
+                if (libPatchGame) {
+                    const m = Process.getModuleByName(soname);
+                    new NativeFunction(libPatchGame.symbols.startOpenGLCmd, 'int', ['pointer', 'pointer','int'])(
+                        m.base,
+                        Memory.allocUtf8String(dumpDir),
+                        100,
+                    );
+                }
+            }
+        }
+        {
+            if (libPatchGame) {
+                const m = Process.getModuleByName(soname);
+                new NativeFunction(libPatchGame.symbols.hookOpenGL, 'int', ['pointer', 'pointer'])(
+                    m.base,
+                    Memory.allocUtf8String(dumpDir),
+                );
+            }
         }
     },
 },},
@@ -789,8 +812,9 @@ rpc.exports = {
 
 declare global {                                                                                                                            
     var helloWorld: () => void;                                                                                                             
-    var d: () => void;                                                                                                             
-    var p: () => void;                                                                                                             
+    var d: () => void;     // dump all texture2Ds                                                                                                        
+    var p: () => void;     // print all texture2Ds                                                                                                        
+    var t: () => void;     // do some tests;
 }    
 
 globalThis.helloWorld = () => {                                                                                                             
@@ -820,3 +844,10 @@ globalThis.d= ()  => {
 globalThis.p= ()  => {
     console.log('texture2d count', Object.keys(allTextures).length)
 }                                                                                                            
+
+globalThis.t= ()  => {
+
+    allCommands.push({
+        cmd: 'OpenGLTest',
+    })
+}

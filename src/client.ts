@@ -152,11 +152,11 @@ function calcCompressedDataLength(
 
 function getGlCompressImageFormat(format: number, ext_etc: any, ext_etc1: any,  ext_astc: any) {
     const formatName = findName(format, formats_GLES2);
-    if (formatName === 'GL_ETC1_RGB8_OES') return ext_etc1.COMPRESSED_RGB_ETC1_WEBGL;
-    if (formatName === 'GL_COMPRESSED_RGB8_ETC2') return ext_etc.COMPRESSED_RGB8_ETC2;
-    if (formatName === 'GL_COMPRESSED_RGBA8_ETC2_EAC') return ext_etc.COMPRESSED_RGBA8_ETC2_EAC;
-    if (formatName === 'GL_COMPRESSED_RGBA_ASTC_4x4_KHR') return ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR;
-    if (formatName === 'GL_COMPRESSED_RGBA_ASTC_8x8_KHR') return ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR;
+    if (formatName === 'GL_ETC1_RGB8_OES')                  return ext_etc1.COMPRESSED_RGB_ETC1_WEBGL;
+    if (formatName === 'GL_COMPRESSED_RGB8_ETC2')           return ext_etc.COMPRESSED_RGB8_ETC2;
+    if (formatName === 'GL_COMPRESSED_RGBA8_ETC2_EAC')      return ext_etc.COMPRESSED_RGBA8_ETC2_EAC;
+    if (formatName === 'GL_COMPRESSED_RGBA_ASTC_4x4_KHR')   return ext_astc.COMPRESSED_RGBA_ASTC_4x4_KHR;
+    if (formatName === 'GL_COMPRESSED_RGBA_ASTC_8x8_KHR')   return ext_astc.COMPRESSED_RGBA_ASTC_8x8_KHR;
     throw new Error(`Unknown format ${format}`);
 }
 
