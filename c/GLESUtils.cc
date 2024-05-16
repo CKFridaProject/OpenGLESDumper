@@ -58,6 +58,11 @@ extern "C" int __attribute__((visibility("default"))) testOpenGL (unsigned char*
 
 void saveTextureUsingReadPixels(GLuint textureId, int width, int height, const char* filename, int textureFormat) {
 
+    GLint oldViewport[4];
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+    LOG_INFOS("ViewPort: %d, %d, %d, %d", oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+
+
     glBindTexture(GL_TEXTURE_2D, textureId);
     if (glGetError() != GL_NO_ERROR) {
         LOG_INFOS( "Error occurred while binding the texture with %d format %x(%s)", textureId, textureFormat, getInternalFormatsGLES2(textureFormat));
@@ -75,6 +80,7 @@ void saveTextureUsingReadPixels(GLuint textureId, int width, int height, const c
     GLubyte* pixels = new GLubyte[width * height * 4];
     glGenRenderbuffers(1, &renderbuffer);
 
+    glViewport(0, 0, width, height);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
@@ -109,6 +115,8 @@ void saveTextureUsingReadPixels(GLuint textureId, int width, int height, const c
 
     // Write the pixel data
     fwrite(pixels, 1, width * height * 4, outFile);
+
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
 
     // Clean up
     delete[] pixels;
@@ -216,16 +224,7 @@ int listAllTexture2Ds(unsigned char* base, const char* outputDir) {
             glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
             glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_COMPRESSED, &isCompressed);
 
-            // LOG_INFOS("TextureId: %d width: %d, height: %d, internalFormat: 0x%x(%s), isCompressed: %d",
-            //           t, width, height, internalFormat, getInternalFormatsGLES2(internalFormat), isCompressed);
-
-            if(    internalFormat == GL_RGB8
-                || internalFormat == GL_RGBA4
-                || internalFormat == GL_RGBA8
-                || internalFormat == GL_R8
-            )
             {
-
                 static char filename[1024];
                 sprintf(filename, "%s/%08d.bin", outputDir, t);
                 saveTextureToFileUsingShader(t, width, height, filename, internalFormat);
@@ -294,43 +293,45 @@ GLuint createProgram(const char* vertexShaderSource, const char* fragmentShaderS
     return program;
 }
 
-const GLchar* vertexShaderSource = 
-    "#version 320 es                    \n"
-    "in vec4 position;                  \n"
-    "in vec2 texCoords;                 \n"
-    "out vec2 TexCoords;                \n"
-    "void main()                        \n"
-    "{                                  \n"
-    "    gl_Position = position;        \n"
-    "    TexCoords = texCoords;         \n"
-    "}                                  \n";
-
-const GLchar* fragmentShaderSource =
-    "#version 320 es                            \n"
-    "precision mediump float;                   \n"
-    "in vec2 TexCoords;                         \n"
-    "uniform sampler2D sampler;                 \n"
-    "out vec4 color;                            \n"
-    "void main()                                \n"
-    "{                                          \n"
-    "    color = texture(sampler, TexCoords);   \n"
-    "}                                          \n";
-
-// Full-screen quad
-GLfloat quadVertices[] = {
-    -1.0f,  1.0f,  0.0f,  0.0f, 1.0f,
-    -1.0f, -1.0f,  0.0f,  0.0f, 0.0f,
-     1.0f, -1.0f,  0.0f,  1.0f, 0.0f,
-
-     1.0f, -1.0f,  0.0f,  1.0f, 0.0f,
-     1.0f,  1.0f,  0.0f,  1.0f, 1.0f,
-    -1.0f,  1.0f,  0.0f,  0.0f, 1.0f
-};
-
 void saveTextureToFileUsingShader(GLuint textureId, int width, int height, const char* filename, GLenum internalFormat)
 {
-    // Application-specific setup code here...
+    const GLchar *vertexShaderSource =
+        "#version 320 es                    \n"
+        "in vec4 position;                  \n"
+        "in vec2 texCoords;                 \n"
+        "out vec2 TexCoords;                \n"
+        "void main()                        \n"
+        "{                                  \n"
+        "    gl_Position = position;        \n"
+        "    TexCoords = texCoords;         \n"
+        "}                                  \n";
 
+    const GLchar *fragmentShaderSource =
+        "#version 320 es                            \n"
+        "precision mediump float;                   \n"
+        "in vec2 TexCoords;                         \n"
+        "uniform sampler2D sampler;                 \n"
+        "out vec4 color;                            \n"
+        "void main()                                \n"
+        "{                                          \n"
+        "    color = texture(sampler, TexCoords);   \n"
+        "}                                          \n";
+
+    // Full-screen quad
+    GLfloat quadVertices[] = {
+        -1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+
+        1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 0.0f, 0.0f, 1.0f};
+
+    GLint oldViewport[4];
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+    LOG_INFOS("ViewPort: %d, %d, %d, %d", oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+
+    glViewport(0, 0, width, height);
     // 1. Create the uncompressed texture
     GLuint uncompressedTexture;
     glGenTextures(1, &uncompressedTexture);
@@ -346,7 +347,6 @@ void saveTextureToFileUsingShader(GLuint textureId, int width, int height, const
     // 3. Render the compressed texture to the framebuffer using a shader
     GLuint compressedTexture = textureId; 
 
-    //GLuint program = ...; // Implement shader compilation and program creation
     GLuint program = createProgram(vertexShaderSource, fragmentShaderSource);
 
     GLuint VAO, VBO;
@@ -370,11 +370,11 @@ void saveTextureToFileUsingShader(GLuint textureId, int width, int height, const
     GLubyte* pixels = new GLubyte[width * height * 4];
     glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-    _frida_hexdump(pixels, 0x100);
+    _frida_hexdump(pixels, 0x20);
 
-    FILE *outFile = fopen("/data/data/com.Joymax.GreatMagician/files/tt.bin", "wb");
+    FILE *outFile = fopen(filename, "wb");
     if (outFile == NULL) {
-        LOG_INFOS("Failed to open file: ");
+        LOG_INFOS("Failed to open file: %s", filename);
 
     } else {
         // Write width, height, and format
@@ -396,16 +396,33 @@ void saveTextureToFileUsingShader(GLuint textureId, int width, int height, const
     glDeleteVertexArrays(1, &VAO);
     glDeleteProgram(program);
 
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+
     // Application-specific shutdown code here...
 }
 
 
 extern "C" int __attribute__((visibility("default"))) startOpenGLCmd (unsigned char* base, const char* outputDir ) {
+
+
+    listAllTexture2Ds( base,  outputDir) ;
+
+    if (0) {
+
+        static char filename[1024];
+        sprintf(filename, "%s/tt.bin", outputDir);
+        // const int textureId = 188, width = 892,height = 980; 
+        //const int textureId = 186, width= 256, height= 256;
+        const int textureId = 99, width= 360, height= 200;
+        const int internalFormat = 0x9278;
+        LOG_INFOS("saveTextureToFileUsingShader(%d, %d, %d, %s, %d)", textureId, width, height, filename, internalFormat);
+        saveTextureToFileUsingShader(textureId, width, height, filename, internalFormat);
+    }
+
     return 0;
 }
 
 extern "C" int __attribute__((visibility("default"))) hookOpenGL (unsigned char* base, const char* outputDir) {
-
     return 0;
 }
 

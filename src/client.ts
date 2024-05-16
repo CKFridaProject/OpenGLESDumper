@@ -654,15 +654,67 @@ const appTexture2D = async (appDiv : HTMLDivElement) => {
 
 }
 
+const appBins = async (appDiv : HTMLDivElement) => {
+    var socket = io();
+    socket.emit('get_bins');
+    socket.on('bins', (bins: {
+        width: number;
+        height: number;
+        format: number;
+        pixels: Uint8Array,
+    }[]) => {
+
+        const div = document.createElement('div');
+
+        bins.forEach((bin) => {
+
+            const { width, height, format, pixels } = bin;
+
+            console.log(`width: ${width} height: ${height} format: ${format} pixels: ${pixels.byteLength}`);
+            // console.log(`pixels: ${new Uint8Array(pixels)}`);
+
+            if (width != 0 && height != 0) {
+
+                const img = document.createElement('img');
+                img.width = width;
+                img.height = height;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx: any = canvas.getContext('2d');
+                const imageData = ctx.createImageData(width, height);
+                imageData.data.set(new Uint8Array(pixels));
+                ctx.putImageData(imageData, 0, 0);
+
+                img.src = canvas.toDataURL();
+                div.appendChild(img);
+
+                const p = document.createElement('p');
+                p.innerHTML = `width: ${width}<br>height: ${height}<br>pixels: ${pixels.byteLength} bytes`;
+                div.appendChild(p);
+            }
+
+
+        })
+
+        appDiv.appendChild(div);
+
+    })
+
+}
+
+
 const appDiv = document.getElementById('app') as HTMLDivElement;
 if (appDiv) {
 
     const query = parse(location.search.substring(1));
-    const fun = query?.f ?? "images";
+    const fun = query?.f ?? "bins";
 
     switch (fun) {
 
         case "images": appImages(appDiv); break;
+        case "bins": appBins(appDiv); break;
         case "texture2D": appTexture2D(appDiv); break;
 
         default:{

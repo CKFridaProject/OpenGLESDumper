@@ -40,7 +40,11 @@ def main():
             showImg(fn)
 
 def main():
-    im = showImg('/tmp/tt.bin')
+    if len(sys.argv) != 2:
+        print('Usage: %s <filename>' % sys.argv[0])
+        sys.exit(1)
+    fn = sys.argv[1]
+    im = showImg(fn)
     plt.imshow(im)
     plt.show()
     

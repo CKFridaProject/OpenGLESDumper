@@ -44,7 +44,12 @@
     "webpack-hot-middleware": "^2.26.1"
   },
   "dependencies": {
+    "@types/ndarray": "^1.0.14",
+    "@types/numjs": "^0.16.8",
+    "canvas": "^2.11.2",
     "multer": "^1.4.5-lts.1",
+    "ndarray": "^1.0.19",
+    "numjs": "^0.16.1",
     "querystring-es3": "^0.2.1",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5"

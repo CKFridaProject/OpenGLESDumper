@@ -11,7 +11,6 @@
 
 #include "utils.h"
 
-// curl_easy_perform.
 
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
     *(size_t*)stream += size * nmemb;

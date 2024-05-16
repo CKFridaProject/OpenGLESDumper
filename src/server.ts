@@ -1,12 +1,15 @@
 
+import { Image, ImageData } from 'canvas';
+import ndarray from 'ndarray';
+import * as np from 'numjs';
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import multer from 'multer';
 import path from 'path';
 import webpack from 'webpack';
+
 import webpackDevMiddleware from 'webpack-dev-middleware';
-import webpackHotMiddleware from 'webpack-hot-middleware';
 import config from '../webpack.config';
 import {
     DUMP_DATA,
@@ -14,6 +17,7 @@ import {
 }  from './utils';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
+import webpackHotMiddleware from 'webpack-hot-middleware';
 
 
 const app = express();
@@ -60,7 +64,7 @@ const pullDumps = (packageName:string, dumpDir:string) => {
     execCmd( `adb pull /data/data/${packageName}/files/Texture2D.json .`);
 }
 
-const updataImages = (dumpDir:string) => {
+const updateImages = (dumpDir:string) => {
     images =[]
     const dumpFiles = fs.readdirSync(dumpDir);
     const jsonFiles = dumpFiles.filter(fn => fn.endsWith('.json'));
@@ -69,6 +73,53 @@ const updataImages = (dumpDir:string) => {
         images.push({ fn, data });
     }
 }
+
+const updateBins = (dumpDir:string) => {
+    const bins : {
+        width: number;
+        height: number;
+        format: number;
+        pixels: Uint8Array,
+    }[] =[]
+    const dumpFiles = fs.readdirSync(dumpDir);
+    const jsonFiles = dumpFiles.filter(fn => fn.endsWith('.bin'));
+    for (const fn of jsonFiles) {
+        const fullpath = path.join(dumpDir,fn)
+
+        const binData = new Uint8Array(fs.readFileSync(fullpath));
+
+        const GL_RGBA = 0x1908;
+
+        let dataView = new DataView(binData.buffer);
+
+        // Read width, height, and format
+        let width  = dataView.getInt32(0, true);
+        let height = dataView.getInt32(4, true);
+        let format = dataView.getInt32(8, true);
+
+        let mode: string;
+
+        // Check the format
+        if (format === GL_RGBA) {  // GL_RGBA
+            mode = 'RGBA';
+        } else {
+            console.log('Unsupported format');
+            continue
+        }
+
+
+        let pixels = binData.slice(12);
+
+        bins.push({ 
+            width,
+            height,
+            format,
+            pixels,
+        })
+    }
+    return bins
+}
+
 
 
 app.get('/ping', (req, res) => {
@@ -86,7 +137,7 @@ app.get('/pull', (req, res) => {
 
 app.get('/refresh', (req, res) => {
     const dumpDir = `${process.cwd()}/dumps`;
-    updataImages(dumpDir);
+    updateImages(dumpDir);
     res.json({ count:images.length, files : images.map(i => i.fn) });
 });
 
@@ -104,9 +155,17 @@ app.post('/upload', upload.single('image'), (req, res) => {
 io.on('connection', (socket) => {
     socket.on('get_images', () => {
         const dumpDir = `${process.cwd()}/dumps`;
-        updataImages(dumpDir);
+        updateImages(dumpDir);
         socket.emit('images', images);
     });
+
+    socket.on('get_bins', () => {
+        const dumpDir = `${process.cwd()}/dumps`;
+        const bins = updateBins(dumpDir);
+        console.log(`bins: ${bins.length}`)
+        socket.emit('bins', bins);
+    });
+
 
     socket.on('texture2D', () => {
         const fn = `${process.cwd()}/Texture2D.json`;
