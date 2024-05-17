@@ -237,6 +237,37 @@ int listAllTexture2Ds(unsigned char* base, const char* outputDir) {
     return 0;
 }
 
+int enumeratAllTexture2Ds(std::function<bool(int,int,int,int,int)> func, int max_cnt=3000) {
+    int originalTextureID = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &originalTextureID);
+    int texture2DCnt = 0;
+    // list all texture2d
+    for (int t = 0; t < max_cnt; t++)
+    {
+        if (glIsTexture(t)) {
+            glBindTexture(GL_TEXTURE_2D, t);
+
+            int level = 0;
+            int width = 0, height = 0, internalFormat = 0, isCompressed = 0;
+
+            // Get the width, height, and internal format of the currently bound texture
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &width);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &height);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_INTERNAL_FORMAT, &internalFormat);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_COMPRESSED, &isCompressed);
+
+            auto cont = func(t, width, height, internalFormat, isCompressed);
+            if(!cont) break;
+            texture2DCnt ++;
+        }
+    }
+
+    glBindTexture(GL_TEXTURE_2D, originalTextureID);
+
+    return texture2DCnt;
+}
+
+
 // Function to compile a shader and check for errors
 GLuint loadShader(GLenum type, const char* src)
 {
@@ -402,22 +433,19 @@ void saveTextureToFileUsingShader(GLuint textureId, int width, int height, const
 }
 
 
-extern "C" int __attribute__((visibility("default"))) startOpenGLCmd (unsigned char* base, const char* outputDir ) {
+extern "C" int __attribute__((visibility("default"))) dumpAllTexture2Ds (unsigned char* base, const char* outputDir ) {
 
+    // listAllTexture2Ds( base,  outputDir) ;
+    auto cnt = enumeratAllTexture2Ds( [outputDir](int id, int width, int height, int internalFormat, int isCompressed) {
+        {
+            static char filename[1024];
+            sprintf(filename, "%s/%08d.bin", outputDir, id);
+            saveTextureToFileUsingShader(id, width, height, filename, internalFormat);
+        }
+        return true;
+    });
 
-    listAllTexture2Ds( base,  outputDir) ;
-
-    if (0) {
-
-        static char filename[1024];
-        sprintf(filename, "%s/tt.bin", outputDir);
-        // const int textureId = 188, width = 892,height = 980; 
-        //const int textureId = 186, width= 256, height= 256;
-        const int textureId = 99, width= 360, height= 200;
-        const int internalFormat = 0x9278;
-        LOG_INFOS("saveTextureToFileUsingShader(%d, %d, %d, %s, %d)", textureId, width, height, filename, internalFormat);
-        saveTextureToFileUsingShader(textureId, width, height, filename, internalFormat);
-    }
+    LOG_INFOS("%d textures dumped", cnt);
 
     return 0;
 }

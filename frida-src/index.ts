@@ -660,17 +660,23 @@ const hookGame = (info:{[key:string]:any}) => {
     enterFun(args, tstr, thiz) {
         {
             const command = allCommands.length>0 ? allCommands[allCommands.length - 1] : undefined;
-            if (command?.cmd==='OpenGLTest') {
-                allCommands.pop();
-                if (libPatchGame) {
-                    const m = Process.getModuleByName(soname);
-                    new NativeFunction(libPatchGame.symbols.startOpenGLCmd, 'int', ['pointer', 'pointer'])(
-                        m.base,
-                        Memory.allocUtf8String(dumpDir),
-                    );
+            if(allCommands.length>0)allCommands.pop();
+            if(command){
+                const {cmd} = command;
+                switch(cmd){
+                    case "dumpAllTexture2Ds": {
+                        if (libPatchGame) {
+                            const m = Process.getModuleByName(soname);
+                            new NativeFunction(libPatchGame.symbols.dumpAllTexture2Ds, 'int', ['pointer', 'pointer'])(
+                                m.base,
+                                Memory.allocUtf8String(dumpDir),
+                            );
+                        }
+                    } break;
                 }
             }
         }
+        if(0)
         {
             if (libPatchGame) {
                 const m = Process.getModuleByName(soname);
@@ -823,7 +829,7 @@ declare global {
     var helloWorld: () => void;                                                                                                             
     var d: () => void;     // dump all texture2Ds                                                                                                        
     var p: () => void;     // print all texture2Ds                                                                                                        
-    var t: () => void;     // do some tests;
+    var dumpAllTexture2Ds: () => void;     // do some tests;
 }    
 
 globalThis.helloWorld = () => {                                                                                                             
@@ -854,9 +860,9 @@ globalThis.p= ()  => {
     console.log('texture2d count', Object.keys(allTextures).length)
 }                                                                                                            
 
-globalThis.t= ()  => {
+globalThis.dumpAllTexture2Ds= ()  => {
 
     allCommands.push({
-        cmd: 'OpenGLTest',
+        cmd: 'dumpAllTexture2Ds',
     })
 }

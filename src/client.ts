@@ -666,6 +666,41 @@ const appBins = async (appDiv : HTMLDivElement) => {
 
         const div = document.createElement('div');
 
+        // Create a download button
+        const btn = document.createElement('button');
+        btn.innerHTML = "Download all images";
+
+        // Add click event listener to button
+        btn.addEventListener('click', async () => {
+            for(let index = 0; index < bins.length; index++){
+                const bin = bins[index];
+                const { width, height, pixels } = bin;
+                if (width != 0 && height != 0) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx : any = canvas.getContext('2d');
+                    const imageData = ctx.createImageData(width, height);
+                    imageData.data.set(new Uint8Array(pixels));
+                    ctx.putImageData(imageData, 0, 0);
+
+                    // Create a link element and trigger a download
+                    let link = document.createElement('a');
+
+                    const fn = `image${`00000000${index}`.slice(-8)}.png`;
+
+                    link.download = fn
+                    link.href = canvas.toDataURL();
+                    link.click();
+
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            };
+        });
+
+        div.appendChild(btn);
+
+
         bins.forEach((bin) => {
 
             const { width, height, format, pixels } = bin;
@@ -694,11 +729,10 @@ const appBins = async (appDiv : HTMLDivElement) => {
                 p.innerHTML = `width: ${width}<br>height: ${height}<br>pixels: ${pixels.byteLength} bytes`;
                 div.appendChild(p);
             }
-
-
-        })
+        });
 
         appDiv.appendChild(div);
+
 
     })
 
