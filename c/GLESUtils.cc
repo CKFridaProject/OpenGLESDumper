@@ -433,7 +433,11 @@ void saveTextureToFileUsingShader(GLuint textureId, int width, int height, const
 }
 
 
-extern "C" int __attribute__((visibility("default"))) dumpAllTexture2Ds (unsigned char* base, const char* outputDir ) {
+extern "C" int __attribute__((visibility("default"))) dumpAllTexture2Ds (unsigned char* base, const char* outputDir, int clear ) {
+
+    if(0!=check_folder_exist(outputDir) ) make_folder(outputDir);
+
+    if(clear) delete_and_remake_folder(outputDir);
 
     // listAllTexture2Ds( base,  outputDir) ;
     auto cnt = enumeratAllTexture2Ds( [outputDir](int id, int width, int height, int internalFormat, int isCompressed) {

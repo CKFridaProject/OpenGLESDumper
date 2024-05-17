@@ -7,11 +7,12 @@
 #include <ftw.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <curl/curl.h>
+//#include <curl/curl.h>
 
 #include "utils.h"
 
 
+#if 0
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
     *(size_t*)stream += size * nmemb;
     return size * nmemb;
@@ -43,6 +44,8 @@ size_t get_body_size(const char *url) {
     curl_global_cleanup();
     return len;
 }
+
+#endif
 
 
 extern "C" int __attribute__((visibility("default"))) writeTextFile (const char* filename, char* context) {
@@ -85,35 +88,14 @@ extern "C" int __attribute__((visibility("default"))) base64_encode(const unsign
 }
 
 
-int delete_file(const char *path, const struct stat *s, int type, struct FTW *ftwb) {
-    if(remove(path) < 0) {
-        perror("remove");
-        return -1;
-    }
-    return 0;
-}
-
-int delete_and_remake_folder(const char *folder_path) {
-    if (nftw(folder_path, delete_file, 64, FTW_DEPTH | FTW_PHYS) < 0) {
-        perror("nftw");
-        return -1;
-    }
-
-    if (mkdir(folder_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0) {
-        perror("mkdir");
-        return -1;
-    }
-
-    return 0;
-}
-
 
 
 extern "C" int __attribute__((visibility("default"))) init (unsigned char* base, const char* outputDir) {
 
 
-    LOG_INFOS(" go here %p %s", base, outputDir);
-    delete_and_remake_folder(outputDir);
+    // LOG_INFOS(" go here %p %s", base, outputDir);
+    //_frida_log("gohere");
+    // delete_and_remake_folder(outputDir);
 
     return 0;
 }

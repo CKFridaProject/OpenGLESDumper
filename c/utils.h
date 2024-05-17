@@ -20,3 +20,6 @@ LOG_INFOS_WITH_N(N, "[%s:%d] " fmt , __FILE__, __LINE__,  ##args);
 #define LOG_INFOS(fmt, args...)  LOG_INFOS_WITH_N_FILE_LINE(0x800, fmt, ##args)
 
 
+int check_folder_exist(const char *folder_path) ;
+int make_folder(const char *folder_path) ;
+int delete_and_remake_folder(const char *folder_path) ;

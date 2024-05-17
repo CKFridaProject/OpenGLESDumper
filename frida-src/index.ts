@@ -39,7 +39,7 @@ let libPatchGame : INFO_TYPE | null = null;
 
 interface CMD_DATA {
     cmd     : string,
-    args   ?: string[],
+    args   ?: {[key:string]:string|boolean},
 };
 
 const allCommands : CMD_DATA[] = [ ]
@@ -665,12 +665,20 @@ const hookGame = (info:{[key:string]:any}) => {
                 const {cmd} = command;
                 switch(cmd){
                     case "dumpAllTexture2Ds": {
+                        const clear : boolean = (command.args?.clear as boolean) ?? false;
+                        const outputDir : string = (command.args?.outputDir as string) ?? '';
                         if (libPatchGame) {
                             const m = Process.getModuleByName(soname);
-                            new NativeFunction(libPatchGame.symbols.dumpAllTexture2Ds, 'int', ['pointer', 'pointer'])(
-                                m.base,
-                                Memory.allocUtf8String(dumpDir),
-                            );
+                            if(outputDir){
+                                new NativeFunction(libPatchGame.symbols.dumpAllTexture2Ds, 'int', ['pointer', 'pointer','int'])(
+                                    m.base,
+                                    Memory.allocUtf8String(outputDir),
+                                    clear?1:0,
+                                );
+                            }
+                            else{
+                                console.log(`dumpAllTexture2Ds ${outputDir} not set `);
+                            }
                         }
                     } break;
                 }
@@ -712,7 +720,7 @@ const hookGame = (info:{[key:string]:any}) => {
 const testGame = (info:{[key:string]:any}) => {
 
 
-    {
+    if(0) {
         // get the version of zlib
         const m = Process.getModuleByName('libz.so')
         m.enumerateExports()
@@ -724,7 +732,7 @@ const testGame = (info:{[key:string]:any}) => {
         console.log('zlib version', fun().readUtf8String());
     }
 
-    {
+    if(0) {
         // get the version of libssl
         const m = Process.getModuleByName('libssl.so')
         console.log(`module: ${m} ${JSON.stringify(m)}`)
@@ -754,7 +762,7 @@ const loadPatchlib = (info:{[key:string]:any})=> {
     const dumpDir = `/data/data/${packageName}/files/dumps`;
 
     if(libPatchGame==null) {
-        {
+        if(0) {
             Module.load('/data/local/tmp/libz.so.1')
             Module.load('/data/local/tmp/libcrypto.so.3')
             Module.load('/data/local/tmp/libssl.so.3')
@@ -768,7 +776,7 @@ const loadPatchlib = (info:{[key:string]:any})=> {
         libPatchGame = libpatchgameinfo.load(
             '/data/local/tmp/libpatchgame.so',
             [
-                'libcurl.so',
+//                'libcurl.so',
             ],
             {
                 _frida_dummy,
@@ -778,6 +786,7 @@ const loadPatchlib = (info:{[key:string]:any})=> {
 
             },
         )
+        if(1)
         {
             const m = Process.getModuleByName(soname);
             new NativeFunction(libPatchGame.symbols.init,'int',['pointer', 'pointer'])(
@@ -860,9 +869,14 @@ globalThis.p= ()  => {
     console.log('texture2d count', Object.keys(allTextures).length)
 }                                                                                                            
 
-globalThis.dumpAllTexture2Ds= ()  => {
+globalThis.dumpAllTexture2Ds= (app:string='com.Joymax.GreatMagician')  => {
+
+    const appInfo = getAndroidAppInfo();
+    const outputDir = `${appInfo.dataDir}/files/dumps/`;
+    console.log(`dumpAllTexture2Ds ${outputDir}`);
 
     allCommands.push({
         cmd: 'dumpAllTexture2Ds',
+        args:{clear:true, outputDir},
     })
 }

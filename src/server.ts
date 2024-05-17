@@ -61,7 +61,7 @@ const execCmd = (cmd:string) => {
 
 const pullDumps = (packageName:string, dumpDir:string) => {
     execCmd( `rm -fr ${dumpDir} && mkdir ${dumpDir} && adb pull /data/data/${packageName}/files/dumps .`);
-    execCmd( `adb pull /data/data/${packageName}/files/Texture2D.json .`);
+    //execCmd( `adb pull /data/data/${packageName}/files/Texture2D.json .`);
 }
 
 const updateImages = (dumpDir:string) => {
@@ -131,7 +131,7 @@ app.get('/pull', (req, res) => {
     const packageName = query.p ?? 'com.Joymax.GreatMagician';
     const dumpDir = `${process.cwd()}/dumps`;
     pullDumps(packageName, dumpDir);
-    const files = fs.readdirSync(dumpDir).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(dumpDir);
     res.json({ count: files.length });
 });
 
